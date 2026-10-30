@@ -31,6 +31,8 @@ For browser testing, add your local hostname (usually `localhost`) under Authent
 
 ## Validation
 
+TypeScript checking and Android, iOS, and web bundle exports were verified during implementation. Live authentication and device session restoration require your Firebase configuration and remain to be tested. The generated dependency tree reports 12 npm audit advisories (7 high, 5 low); see `dependency-audit.json`. Review these before production release; the audit's suggested Expo/Firebase downgrades conflict with the current SDK requirements.
+
 ```powershell
 npx tsc --noEmit
 npx expo export --platform all
