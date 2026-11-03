@@ -1,0 +1,14 @@
+/* These surfaces remain visible while route content fades or remounts. */
+:root {
+  color-scheme: dark;
+  background-color: #101116;
+}
+html,
+body,
+#root {
+  background-color: #101116;
+  min-height: 100%;
+}
+body {
+  margin: 0;
+}

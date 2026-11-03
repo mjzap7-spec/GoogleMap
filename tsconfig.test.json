@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": ".test-build",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": [
+    "src/config/firebase/firestore.native.ts",
+    "src/features/map/models/**/*.ts",
+    "src/features/map/viewmodels/**/*.ts",
+    "src/features/map/data/**/*.ts",
+    "src/features/contacts/models/**/*.ts",
+    "src/features/contacts/viewmodels/**/*.ts",
+    "src/features/contacts/data/**/*.ts",
+    "src/shared/mvvm/**/*.ts",
+    "src/features/auth/models/**/*.ts",
+    "src/features/auth/viewmodels/**/*.ts",
+    "src/features/auth/data/FirebaseAuthRepository.ts",
+    "src/features/auth/data/StoredProfileCache.ts",
+    "src/features/auth/data/OpenMeteoCityRepository.ts",
+    "src/features/auth/data/CloudinaryAvatarStorage.ts",
+    "src/features/auth/bindings/dependencies.ts",
+    "src/shared/utils/dateOnly.ts",
+    "src/shared/i18n/**/*.ts"
+  ]
+}

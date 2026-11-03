@@ -1,25 +1,65 @@
 {
   "expo": {
-    "name": "Nest",
+    "name": "Google Map",
     "slug": "nest-auth",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/brand/google-maps.png",
+    "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "backgroundColor": "#101116"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#101116",
+        "foregroundImage": "./assets/brand/google-maps.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "backgroundColor": "#101116",
+      "package": "com.anonymous.nestauth"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/brand/google-maps.png",
+      "name": "Google Map"
+    },
+    "scheme": "nest-auth",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#101116",
+          "image": "./assets/brand/google-maps.png",
+          "imageWidth": 144,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a photo for your profile avatar.",
+          "microphonePermission": false,
+          "cameraPermission": false
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Show your current position and draw the path you travel while the map is open.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
+      "./plugins/withShortAndroidObjectPaths.js",
+      "./plugins/withAndroidDevSupport.js",
+      "./plugins/withFirestoreStreaming.js"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "backgroundColor": "#101116"
   }
 }

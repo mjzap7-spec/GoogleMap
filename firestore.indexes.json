@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "contactRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sharedLocations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "bucket", "order": "ASCENDING" },
+        { "fieldPath": "geohash", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

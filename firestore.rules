@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function signedIn() { return request.auth != null; }
+  function own(uid) { return signedIn() && request.auth.uid == uid; }
+  function profile(uid) { return get(/databases/$(database)/documents/users/$(uid)).data; }
+  function nameValid(value) { return value is string && value.size()>0 && value.size()<=100 && value.matches('.*[^ ].*'); }
+  function avatarValid(value) { return value == null || (value is string && value.size()<2048 && value.matches('https://.*')); }
+  function connected(uid, peer) {
+   return exists(/databases/$(database)/documents/users/$(uid)/contacts/$(peer))
+    && exists(/databases/$(database)/documents/users/$(peer)/contacts/$(uid))
+    && get(/databases/$(database)/documents/users/$(uid)/contacts/$(peer)).data.peerId == peer
+    && get(/databases/$(database)/documents/users/$(peer)/contacts/$(uid)).data.peerId == uid;
+  }
+  match /users/{userId} {
+   allow get: if own(userId) || (signedIn() && connected(userId, request.auth.uid));
+   allow list: if false;
+   allow delete: if own(userId);
+   function validProfile() {
+    return request.resource.data.keys().hasAll(['fullName','birthday','location','avatarUrl','createdAt'])
+     && request.resource.data.keys().hasOnly(['fullName','birthday','location','avatarUrl','createdAt'])
+     && nameValid(request.resource.data.fullName)
+     && request.resource.data.birthday is string && request.resource.data.birthday.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+     && request.resource.data.location is string && request.resource.data.location.size()>0 && request.resource.data.location.size()<=120
+     && (request.resource.data.avatarUrl == null || (request.resource.data.avatarUrl is string && request.resource.data.avatarUrl.size()<2048));
+   }
+   allow create: if own(userId) && validProfile() && request.resource.data.createdAt == request.time;
+   allow update: if own(userId) && validProfile() && request.resource.data.createdAt == resource.data.createdAt;
+   match /contactEvents/{eventId} {
+    allow read, delete: if own(userId);
+    function validEvent() {
+     let d = request.resource.data;
+     return signedIn() && d.keys().hasOnly(['kind','actorId','name','requestId','createdAt'])
+      && d.actorId == request.auth.uid && d.actorId != userId
+      && d.name == profile(d.actorId).fullName && d.createdAt == request.time;
+    }
+    function responseEvent() {
+     let d = request.resource.data;
+     let before = get(/databases/$(database)/documents/contactRequests/$(d.requestId)).data;
+     let after = getAfter(/databases/$(database)/documents/contactRequests/$(d.requestId)).data;
+     return (d.kind == 'accepted' || d.kind == 'declined') && before.fromId == userId && before.toId == request.auth.uid
+      && before.status == 'pending' && after.status == d.kind;
+    }
+    function removedEvent() {
+     let d = request.resource.data;
+     let peer = get(/databases/$(database)/documents/users/$(userId)/contacts/$(d.actorId)).data;
+     return d.kind == 'removed' && connected(userId, d.actorId) && peer.requestId == d.requestId
+      && !existsAfter(/databases/$(database)/documents/users/$(userId)/contacts/$(d.actorId))
+      && !existsAfter(/databases/$(database)/documents/users/$(d.actorId)/contacts/$(userId));
+    }
+    allow create: if validEvent() && (responseEvent() || removedEvent());
+   }
+   match /contacts/{contactId} {
+    allow read: if own(userId);
+    function legacy() { return request.resource.data.keys().hasOnly(['name','createdAt']) && nameValid(request.resource.data.name) && request.resource.data.createdAt == request.time; }
+    function acceptedPair() {
+     let data=request.resource.data;
+     let before=get(/databases/$(database)/documents/contactRequests/$(data.requestId)).data;
+     let after=getAfter(/databases/$(database)/documents/contactRequests/$(data.requestId)).data;
+     let other=getAfter(/databases/$(database)/documents/users/$(contactId)/contacts/$(userId)).data;
+     return signedIn() && data.keys().hasOnly(['name','peerId','requestId','createdAt'])
+      && data.peerId == contactId && userId != contactId && nameValid(data.name) && data.createdAt == request.time
+      && before.status == 'pending' && before.toId == request.auth.uid && after.status == 'accepted'
+      && ((before.fromId == userId && before.toId == contactId && data.name == profile(contactId).fullName)
+       || (before.toId == userId && before.fromId == contactId && data.name == before.fromName))
+      && other.peerId == userId && other.requestId == data.requestId;
+    }
+    allow create: if (own(userId) && legacy()) || acceptedPair();
+    allow update: if own(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']) && nameValid(request.resource.data.name);
+    allow delete: if own(userId) && !('peerId' in resource.data)
+     || (signedIn() && (request.auth.uid == userId || request.auth.uid == contactId) && resource.data.peerId == contactId
+      && !existsAfter(/databases/$(database)/documents/users/$(contactId)/contacts/$(userId)));
+   }
+  }
+  match /contactDirectory/{email} {
+   allow get: if signedIn();
+   allow list: if false;
+   allow create, update: if signedIn() && request.auth.token.email is string && email == request.auth.token.email.lower()
+    && request.resource.data.keys().hasOnly(['uid','email','fullName','avatarUrl','updatedAt'])
+    && request.resource.data.uid == request.auth.uid && request.resource.data.email == email
+    && request.resource.data.fullName == profile(request.auth.uid).fullName
+    && request.resource.data.avatarUrl == profile(request.auth.uid).avatarUrl && request.resource.data.updatedAt == request.time
+    && (!exists(/databases/$(database)/documents/contactDirectory/$(email)) || resource.data.uid == request.auth.uid);
+   allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+  }
+  match /contactRequests/{requestId} {
+   allow get: if signedIn() && (!exists(/databases/$(database)/documents/contactRequests/$(requestId)) || resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
+   allow list: if signedIn() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid) && request.query.limit <= 100;
+   function visibleTarget(uid) {
+    let presence=get(/databases/$(database)/documents/sharedLocations/$(uid)).data;
+    let bucket=int(request.time.toMillis() / 120000);
+    return exists(/databases/$(database)/documents/users/$(uid))
+     && presence.bucket >= bucket-1 && presence.bucket <= bucket;
+   }
+   function validRequest() {
+    let d=request.resource.data;
+    let reverse=d.toId+'_'+d.fromId;
+    return signedIn() && d.keys().hasOnly(['fromId','toId','fromName','fromEmail','toEmail','status','createdAt','updatedAt'])
+     && d.fromId == request.auth.uid && d.fromId != d.toId && requestId == d.fromId+'_'+d.toId
+     && d.fromEmail == request.auth.token.email.lower() && d.fromName == profile(d.fromId).fullName
+     && d.toEmail is string && ((d.toEmail == '' && visibleTarget(d.toId))
+     || (d.toEmail != '' && get(/databases/$(database)/documents/contactDirectory/$(d.toEmail)).data.uid == d.toId))
+     && d.status == 'pending' && d.updatedAt == request.time
+     && !exists(/databases/$(database)/documents/users/$(d.fromId)/contacts/$(d.toId))
+     && (!exists(/databases/$(database)/documents/contactRequests/$(reverse)) || get(/databases/$(database)/documents/contactRequests/$(reverse)).data.status != 'pending');
+   }
+   allow create: if validRequest() && request.resource.data.createdAt == request.time;
+   allow update: if (validRequest() && resource.data.status != 'pending'
+      && request.time > resource.data.updatedAt + duration.value(1,'m')
+      && request.resource.data.createdAt == resource.data.createdAt
+      && request.resource.data.fromId == resource.data.fromId && request.resource.data.toId == resource.data.toId)
+    || (signedIn() && resource.data.toId == request.auth.uid && resource.data.status == 'pending'
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt','toEmail'])
+      && (request.resource.data.toEmail == resource.data.toEmail || (resource.data.toEmail == '' && request.resource.data.toEmail == request.auth.token.email.lower()))
+      && request.resource.data.updatedAt == request.time
+      && (request.resource.data.status == 'declined' || (request.resource.data.status == 'accepted'
+       && getAfter(/databases/$(database)/documents/users/$(resource.data.fromId)/contacts/$(resource.data.toId)).data.requestId == requestId
+       && getAfter(/databases/$(database)/documents/users/$(resource.data.toId)/contacts/$(resource.data.fromId)).data.requestId == requestId)));
+  }
+  match /sharedLocations/{userId} {
+   function currentBucket() { return int(request.time.toMillis() / 120000); }
+   function fresh() { return resource.data.bucket >= currentBucket()-1 && resource.data.bucket <= currentBucket(); }
+   allow get: if signedIn() && (!exists(/databases/$(database)/documents/sharedLocations/$(userId)) || fresh());
+   allow list: if signedIn() && fresh() && request.query.limit <= 50;
+   allow create, update: if own(userId) && request.resource.data.keys().hasOnly(['nickname','avatarUrl','latitude','longitude','geohash','bucket','updatedAt'])
+    && request.resource.data.nickname == profile(userId).fullName && avatarValid(request.resource.data.avatarUrl) && request.resource.data.avatarUrl == profile(userId).avatarUrl
+    && request.resource.data.latitude is number && request.resource.data.latitude >= -90 && request.resource.data.latitude <= 90
+    && request.resource.data.longitude is number && request.resource.data.longitude >= -180 && request.resource.data.longitude <= 180
+    && request.resource.data.geohash is string && request.resource.data.geohash.size() == 10
+    && request.resource.data.bucket == currentBucket() && request.resource.data.updatedAt == request.time;
+   allow delete: if own(userId);
+  }
+ }
+}

@@ -40,3 +40,14 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Unit-test compilation
+.test-build/
+
+# Bundle verification output
+.expo-export-check/
+
+# Local Firebase emulator logs
+firestore-debug.log
+firebase-debug.log
+ui-debug.log
