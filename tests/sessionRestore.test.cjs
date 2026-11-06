@@ -39,6 +39,37 @@ test('token refresh preserves the profile and does not restart its listener; sig
   stop();
 });
 
+test('cached profiles can open Home while the first server watch has priority; offline startup also releases background listeners', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const slow of [false, true]) {
+    const cached = {
+      fullName: 'Cached',
+      birthday: '2000-01-01',
+      location: 'Orlando',
+      avatarUrl: null,
+    };
+    const fixture = createFirebaseFixture({
+      profileCache: { read: async () => cached, write: async () => {} },
+    });
+    const session = new SessionViewModel(fixture.repository);
+    session.start();
+    fixture.authChanged(fixture.user);
+    await Promise.resolve();
+    assert.equal(session.getSnapshot().user.profileStatus, 'ready');
+    assert.equal(session.getSnapshot().user.profileSyncPending, true);
+    fixture.profileChanged(cached, { fromCache: true });
+    if (slow) {
+      t.mock.timers.tick(10000);
+      assert.equal(session.getSnapshot().user.profileSyncPending, false);
+      assert.equal(session.getSnapshot().error, '');
+    }
+    fixture.profileChanged({ ...cached, fullName: 'From server' }, { fromCache: false });
+    assert.equal(session.getSnapshot().user.fullName, 'From server');
+    assert.equal(session.getSnapshot().user.profileSyncPending, false);
+    session.stop();
+  }
+});
+
 function clientFixture({ apps = [], initializationError, firestoreError } = {}) {
   const keys = ['API_KEY', 'AUTH_DOMAIN', 'PROJECT_ID', 'APP_ID'].map(
     (key) => `EXPO_PUBLIC_FIREBASE_${key}`,

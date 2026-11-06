@@ -1,3 +1,4 @@
+import { MapPeoplePicker } from './MapPeoplePicker';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import React, {
   memo,
@@ -23,6 +24,7 @@ function openAttribution(url: string) {
 }
 export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
   const { t } = useTranslation();
+  const [cluster, setCluster] = useState<string[]>([]);
 
   const [Renderer, setRenderer] = useState<ComponentType<
     WebViewProps & RefAttributes<WebView>
@@ -30,6 +32,8 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
   const view = useRef<WebView>(null);
   const sequence = useRef(0);
   const sentTrail = useRef<MapCanvasProps['state']['trail'] | undefined>(undefined);
+  const sentSharedTrail = useRef<MapCanvasProps['sharedTrail']>(undefined);
+  const sentUsers = useRef<MapCanvasProps['users']>(undefined);
   const [attempt, setAttempt] = useState(0);
   const [ready, setReady] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -71,23 +75,31 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
           id: ++sequence.current,
           type: 'state',
           language: props.state.language,
+          testUserCount: props.state.testUserCount,
           positionLabel,
           reducedMotion,
           live: props.state.live,
+          ...(sentSharedTrail.current !== props.sharedTrail
+            ? { sharedTrail: props.sharedTrail ?? [] }
+            : {}),
           ...(sentTrail.current !== props.state.trail ? { trail: props.state.trail } : {}),
-          users: props.users ?? [],
+          ...(sentUsers.current !== props.users ? { users: props.users ?? [] } : {}),
           focus: props.focus ?? null,
         }),
       );
       sentTrail.current = props.state.trail;
+      sentUsers.current = props.users;
+      sentSharedTrail.current = props.sharedTrail;
     }
   }, [
     initialized,
     positionLabel,
     props.state.language,
+    props.state.testUserCount,
     props.state.live,
     props.state.trail,
     props.users,
+    props.sharedTrail,
     props.focus,
     reducedMotion,
   ]);
@@ -98,12 +110,14 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
   const retry = () => {
     setReady(false);
     sentTrail.current = undefined;
+    sentSharedTrail.current = undefined;
+    sentUsers.current = undefined;
     setInitialized(false);
     setError('');
     setAttempt((value) => value + 1);
   };
   const send = (command: MapCommand) => {
-    if (ready)
+    if (initialized && !error)
       view.current?.postMessage(
         JSON.stringify({ id: ++sequence.current, type: 'command', command }),
       );
@@ -139,7 +153,14 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
           onMessage={(event) => {
             try {
               const message = JSON.parse(event.nativeEvent.data);
-              if (message.type === 'select-user' && typeof message.userId === 'string') {
+              if (
+                message.type === 'select-users' &&
+                Array.isArray(message.userIds) &&
+                message.userIds.length <= 500 &&
+                message.userIds.every((id: unknown) => typeof id === 'string')
+              ) {
+                setCluster(message.userIds);
+              } else if (message.type === 'select-user' && typeof message.userId === 'string') {
                 props.onSelectUser?.(message.userId);
               } else if (message.type === 'initialized') {
                 setInitialized(true);
@@ -155,7 +176,18 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
         />
       )}
       {(!ready || error) && <MapStatus error={error} retry={error ? retry : undefined} />}
-      <MapControls {...props} ready={ready && !error} send={send} />
+      <MapPeoplePicker
+        users={
+          cluster.length ? (props.users ?? []).filter((user) => cluster.includes(user.id)) : []
+        }
+        open={cluster.length > 0}
+        onClose={() => setCluster([])}
+        onSelect={(id) => {
+          setCluster([]);
+          props.onSelectUser?.(id);
+        }}
+      />
+      <MapControls {...props} ready={initialized && !error} send={send} />
     </View>
   );
 });

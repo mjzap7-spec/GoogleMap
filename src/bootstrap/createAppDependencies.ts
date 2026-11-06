@@ -1,3 +1,5 @@
+import { FirebaseSharingRepository } from '../features/contacts/data/FirebaseSharingRepository';
+import { FirebaseChatRepository } from '../features/chat/data/FirebaseChatRepository';
 import { ExpoLocationTracker } from '../features/map/data/ExpoLocationTracker';
 import { createAuthDependencies, type AuthServices } from '../features/auth/bindings/dependencies';
 import { FirebaseAuthRepository } from '../features/auth/data/FirebaseAuthRepository';
@@ -12,6 +14,7 @@ import { StoredMapPreferences } from '../features/map/data/StoredMapPreferences'
 /** The only place selecting concrete authentication and device adapters. */
 export function createAppDependencies(overrides: Partial<AuthServices> = {}) {
   return createAuthDependencies({
+    developerTesting: typeof __DEV__ !== 'undefined' && __DEV__,
     repository:
       overrides.repository ??
       new FirebaseAuthRepository(
@@ -20,6 +23,8 @@ export function createAppDependencies(overrides: Partial<AuthServices> = {}) {
       ),
     avatarPicker: overrides.avatarPicker ?? new ExpoAvatarPicker(),
     cities: overrides.cities ?? new OpenMeteoCityRepository(),
+    sharing: overrides.sharing ?? new FirebaseSharingRepository(),
+    chat: overrides.chat ?? new FirebaseChatRepository(),
     contacts: overrides.contacts ?? new FirebaseContactRepository(),
     locationTracker: overrides.locationTracker ?? new ExpoLocationTracker(),
     mapPreferences: overrides.mapPreferences ?? new StoredMapPreferences(AsyncStorage),

@@ -18,13 +18,19 @@ The screens render without Firebase configuration. Authentication actions displa
 
 ### Reopen the two Android development apps
 
-Start Pixel_8a and Pixel_8 and wait for Android to finish booting. Keep this project's Metro running in two terminals with `npx expo start --dev-client --port 8081` and `npx expo start --dev-client --port 8082`. In a third terminal, from the mobile directory, run:
+From the mobile directory, run this in one terminal. The launcher starts Pixel_8 and Pixel_8a if needed. Let it start Pixel_8a so it can use the alternate virtual Wi-Fi mode. If an already running Pixel_8a shows **AndroidWifi · Connection failure**, stop that device in Device Manager before running the command.
 
 ```powershell
-npm run android:open
+npm run android:dev
 ```
 
-This opens Pixel_8a on 8081 and Pixel_8 on 8082, restores ADB forwarding after emulator/ADB restarts, and updates only the app's developer-server preference. It identifies the AVD names instead of assuming that emulator-5554 is always the same phone. It preserves app data and does not build or reinstall anything. Both emulators need the development app installed first.
+This reuses this project's running Metro server on ports 8081–8090, or starts one on the first available port, and opens both apps on that same server. A busy server gets up to 15 seconds to respond before the launcher checks for an available port. Keep the Metro terminal open. It restores ADB forwarding and identifies devices by AVD name. App data is preserved; both emulators need the development app installed first and Android Wi-Fi connected for Firebase. No build is required. You do not need to start separate Expo terminals or select a port manually. The older `android:open` command remains available for separate servers on 8081/8082.
+
+### Play a saved emulator route
+
+Open **Map** and tap the center **Start recording** button. From the mobile directory, run `npm run android:route` to play a saved route on Pixel 8a. This reads the route stored by Android Emulator and delivers each GPS fix at its saved time. The app receives the fixes through its normal GPS subscription.
+
+For the specific imported route, run `npm run android:route -- route_2026-11-02_08-12-58 Pixel_8a`. You can also pass a saved `route.json` path. To launch the apps and start playback from one terminal, use `npm run android:dev -- --route`. Tap **Pause** when you finish recording.
 
 ## Source map
 

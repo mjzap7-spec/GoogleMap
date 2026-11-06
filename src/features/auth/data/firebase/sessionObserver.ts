@@ -13,6 +13,7 @@ function mapUser(user: User): AuthUser {
     fullName: user.displayName ?? '',
     avatarUrl: user.photoURL,
     profileStatus: 'loading',
+    profileSyncPending: true,
   };
 }
 
@@ -53,16 +54,20 @@ export function observeFirebaseSession(
           ?.read(user.uid)
           .then((profile) => {
             if (!profile || !active || current !== version || serverResolved) return;
-            latest = { ...base, ...profile, profileStatus: 'ready' };
+            latest = { ...latest, ...profile, profileStatus: 'ready' };
             onChange(latest);
           })
           .catch(() => {});
         const timeout = setTimeout(() => {
-          if (active && current === version && latest.profileStatus === 'loading') {
-            latest = { ...latest, profileStatus: 'error' };
-            onChange(latest);
-            onError(new AuthFailure('profile-unavailable'));
-          }
+          if (!active || current !== version) return;
+          const missing = latest.profileStatus === 'loading';
+          latest = {
+            ...latest,
+            profileSyncPending: false,
+            profileStatus: missing ? 'error' : latest.profileStatus,
+          };
+          onChange(latest);
+          if (missing) onError(new AuthFailure('profile-unavailable'));
         }, 10000);
         const unsubscribeProfile = onSnapshot(
           doc(getFirestore(getFirebaseApp()), 'users', user.uid),
@@ -77,10 +82,11 @@ export function observeFirebaseSession(
             const profile = snapshot.data();
             if (!profile && snapshot.metadata?.fromCache) return;
             serverResolved = true;
-            clearTimeout(timeout);
+            if (networkConfirmed) clearTimeout(timeout);
             latest = {
               ...base,
               profileStatus: 'ready',
+              profileSyncPending: !networkConfirmed && latest.profileSyncPending,
               fullName: typeof profile?.fullName === 'string' ? profile.fullName : base.fullName,
               birthday: typeof profile?.birthday === 'string' ? profile.birthday : undefined,
               location: typeof profile?.location === 'string' ? profile.location : undefined,
@@ -108,6 +114,7 @@ export function observeFirebaseSession(
               serverResolved = true;
               latest = {
                 ...latest,
+                profileSyncPending: false,
                 profileStatus: latest.profileStatus === 'ready' ? 'ready' : 'error',
               };
               onChange(latest);

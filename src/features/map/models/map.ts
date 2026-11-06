@@ -13,6 +13,10 @@ export function isMapLanguage(value: unknown): value is MapLanguage {
   return mapLanguages.some((item) => item.code === value);
 }
 export interface MapState {
+  developerTestingEnabled: boolean;
+  testUserCount: import('./testUsers').TestUserCount;
+  testUsers: readonly MapUserMarker[];
+  selectedTestUserId: string;
   language: MapLanguage;
   tracking: TrackingStatus;
   recording: boolean;
@@ -29,6 +33,7 @@ export interface MapPreferences {
 }
 export type MapCommand = 'zoom-in' | 'zoom-out' | 'recenter';
 export interface MapUserMarker {
+  readonly trip?: boolean;
   readonly id: string;
   readonly nickname: string;
   readonly avatarUrl: string | null;
@@ -37,6 +42,7 @@ export interface MapUserMarker {
   readonly expiresAt: number;
 }
 export interface MapCanvasProps {
+  sharedTrail?: readonly (readonly TravelPoint[])[];
   onSelectUser?: (id: string) => void;
   users?: readonly MapUserMarker[];
   focus?: (MapUserMarker & { readonly revision: number }) | null;

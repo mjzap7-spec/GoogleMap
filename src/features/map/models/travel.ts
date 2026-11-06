@@ -5,6 +5,7 @@ export interface TravelPoint {
   accuracy: number | null;
 }
 export interface LocationTracker {
+  refresh?(): void;
   describe?(point: TravelPoint): Promise<string>;
   watch(
     onPoint: (point: TravelPoint) => void,
@@ -12,7 +13,7 @@ export interface LocationTracker {
   ): Promise<() => void>;
 }
 export type TrackingStatus = 'idle' | 'requesting' | 'tracking' | 'paused' | 'error';
-function distance(a: TravelPoint, b: TravelPoint) {
+export function distanceMeters(a: TravelPoint, b: TravelPoint) {
   const radians = Math.PI / 180;
   const lat = (b.latitude - a.latitude) * radians;
   const lon = (b.longitude - a.longitude) * radians;
@@ -41,7 +42,7 @@ export class TravelRecorder {
     if (!isUsableTravelPoint(point, this.now()) || this.count >= 5000) return false;
     const previous = this.live;
     if (previous && point.timestamp <= previous.timestamp) return false;
-    const meters = previous ? distance(previous, point) : 0;
+    const meters = previous ? distanceMeters(previous, point) : 0;
     if (previous && !this.gap && meters < 5) return false;
     const seconds = previous ? (point.timestamp - previous.timestamp) / 1000 : 0;
     const newSegment = this.gap || !previous || seconds > 30 || meters / seconds > 80;

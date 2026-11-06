@@ -9,6 +9,8 @@ export function useMap() {
   );
   const commands = useMemo(
     () => ({
+      setTestUserCount: viewModel.setTestUserCount,
+      selectTestUser: viewModel.selectTestUser,
       setLanguage: viewModel.setLanguage,
       pauseTracking: viewModel.pauseTracking,
       resumeTracking: viewModel.resumeTracking,

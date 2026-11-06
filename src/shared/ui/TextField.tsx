@@ -1,11 +1,16 @@
 import { useTranslation } from '../i18n/LanguageProvider';
 import React, { useState } from 'react';
-import { TextInput, type TextInputProps } from 'react-native';
+import { TextInput } from 'react-native';
 import { colors } from '../theme/colors';
 import { ui } from './styles';
 
 /** Only focus styling lives here. Values and validation belong to the feature ViewModel. */
-export function TextField({ style, onFocus, onBlur, ...props }: TextInputProps) {
+export function TextField({
+  style,
+  onFocus,
+  onBlur,
+  ...props
+}: React.ComponentPropsWithRef<typeof TextInput>) {
   const { t } = useTranslation();
   const [focused, setFocused] = useState(false);
 

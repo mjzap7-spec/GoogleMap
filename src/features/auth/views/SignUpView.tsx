@@ -13,7 +13,6 @@ export function SignUpView(props: AuthViewProps) {
       {...props}
       google
       title={t('Create account')}
-      subtitle={t('Create an account to get started.')}
       submitLabel={t('Create account')}
       footer={
         <AuthFooter

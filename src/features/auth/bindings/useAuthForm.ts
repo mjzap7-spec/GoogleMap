@@ -1,3 +1,4 @@
+import { useActionNotices } from '../../../shared/ui/Feedback';
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { useFocusEffect } from 'expo-router';
 import type { AuthMode } from '../models/auth';
@@ -8,6 +9,7 @@ import { useAuthDependencies } from './AuthProvider';
 export function useAuthForm(mode: AuthMode) {
   const { createForm } = useAuthDependencies();
   const [viewModel] = useState(() => createForm(mode));
+  useActionNotices(viewModel);
   const state = useSyncExternalStore(
     viewModel.subscribe,
     viewModel.getSnapshot,

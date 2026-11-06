@@ -1,3 +1,5 @@
+import { DeveloperTesting } from '../../map/screens/DeveloperTesting';
+import { SharingSettings } from '../../contacts/screens/SharingSettings';
 import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { useMapSettings } from '../../map/bindings/useMapSettings';
@@ -71,10 +73,14 @@ function ProfileEditor({ user, sessionError }: { user: AuthUser; sessionError: s
         }
         settingsSection={
           editing ? (
-            <MapLanguageSettings
-              language={mapSettings.language}
-              onChange={mapSettings.setLanguage}
-            />
+            <>
+              <DeveloperTesting />
+              <SharingSettings />
+              <MapLanguageSettings
+                language={mapSettings.language}
+                onChange={mapSettings.setLanguage}
+              />
+            </>
           ) : undefined
         }
         passwordSection={

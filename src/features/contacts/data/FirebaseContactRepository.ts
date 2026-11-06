@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getFirestore,
   onSnapshot,
   serverTimestamp,
@@ -106,9 +107,20 @@ export class FirebaseContactRepository implements ContactRepository {
     return collection(this.database(), 'users', userId, 'contacts');
   }
   observe(userId: string, next: (contacts: Contact[]) => void, error: (error: unknown) => void) {
-    let active = true,
-      version = 0;
+    let active = true;
     let previousContacts: string | undefined;
+    type ProfileSummary = Pick<Contact, 'avatarUrl' | 'fullName' | 'birthday' | 'profileLocation'>;
+    const profiles = new Map<string, ProfileSummary>();
+    const fetching = new Map<string, Promise<void>>();
+    let currentRows: Contact[] = [];
+    let confirmed = new Map<string, Contact>();
+    let scheduled: ReturnType<typeof setTimeout> | undefined;
+    const emit = () => {
+      if (active && getFirebaseAuth().currentUser?.uid === userId)
+        next(
+          currentRows.map((row) => (row.peerId ? { ...row, ...profiles.get(row.peerId) } : row)),
+        );
+    };
     try {
       const stop = onSnapshot(
         this.collection(userId),
@@ -116,8 +128,11 @@ export class FirebaseContactRepository implements ContactRepository {
         (snapshot) => {
           if (!active || getFirebaseAuth().currentUser?.uid !== userId) return;
           const contacts = snapshot.docs
-            .filter((item) => !item.metadata.hasPendingWrites)
             .flatMap((item) => {
+              if (item.metadata.hasPendingWrites) {
+                const previous = confirmed.get(item.id);
+                return previous ? [previous] : [];
+              }
               const data = item.data();
               return typeof data.name === 'string'
                 ? [
@@ -142,21 +157,42 @@ export class FirebaseContactRepository implements ContactRepository {
           const signature = JSON.stringify(contacts);
           if (signature === previousContacts) return;
           previousContacts = signature;
-          const current = ++version;
-          next(contacts);
-          if (contacts.some((item) => item.peerId))
-            void Promise.all(
-              contacts.map((item) => this.details(userId, item).catch(() => item)),
-            ).then((enriched) => {
-              if (active && current === version && getFirebaseAuth().currentUser?.uid === userId)
-                next(enriched);
-            });
+          currentRows = contacts;
+          confirmed = new Map(contacts.map((contact) => [contact.id, contact]));
+          const ids = new Set(contacts.flatMap((c) => (c.peerId ? [c.peerId] : [])));
+          for (const id of profiles.keys()) if (!ids.has(id)) profiles.delete(id);
+          for (const id of fetching.keys()) if (!ids.has(id)) fetching.delete(id);
+          emit();
+          for (const id of ids) {
+            if (profiles.has(id) || fetching.has(id)) continue;
+            const request: Promise<void> = getDoc(doc(this.database(), 'users', id))
+              .then((snapshot) => {
+                if (!active || fetching.get(id) !== request || !snapshot.exists()) return;
+                const p = snapshot.data();
+                profiles.set(id, {
+                  fullName: p.fullName,
+                  avatarUrl: p.avatarUrl ?? null,
+                  birthday: p.birthday,
+                  profileLocation: p.location,
+                });
+                if (!scheduled)
+                  scheduled = setTimeout(() => {
+                    scheduled = undefined;
+                    emit();
+                  }, 16);
+              })
+              .catch(() => {})
+              .finally(() => {
+                if (fetching.get(id) === request) fetching.delete(id);
+              });
+            fetching.set(id, request);
+          }
         },
         (reason) => error(failure(reason)),
       );
       return () => {
         active = false;
-        version++;
+        clearTimeout(scheduled);
         stop();
       };
     } catch (reason) {
@@ -216,6 +252,8 @@ export class FirebaseContactRepository implements ContactRepository {
               return {
                 id: item.id,
                 fromId: d.fromId,
+                version: Math.floor(d.updatedAt.toMillis()),
+                acknowledged: d.ackFor === Math.floor(d.updatedAt.toMillis()),
                 fromName: d.fromName,
                 fromEmail: d.fromEmail,
               };
@@ -247,19 +285,26 @@ export class FirebaseContactRepository implements ContactRepository {
       throw failure(error);
     }
   }
-  async sendRequestToUser(userId: string, peerId: string) {
+  async sendRequestToUser(userId: string, peerId: string, groupId?: string) {
     this.check(userId);
     if (!peerId || peerId === userId || peerId.includes('/'))
       throw new ContactFailure('Choose another user.');
     try {
-      const location = await this.sharedLocation(userId, peerId);
-      if (!location) throw new ContactFailure('This user is not sharing a recent location.');
-      await this.createRequest(userId, peerId, '');
+      if (groupId) {
+        if (groupId.includes('/')) throw new ContactFailure('Choose another user.');
+        const group = await getDoc(doc(this.database(), 'privateGroups', groupId));
+        if (!group.data()?.joinedIds.includes(userId) || !group.data()?.joinedIds.includes(peerId))
+          throw new ContactFailure('Choose another user.');
+      } else {
+        const location = await this.sharedLocation(userId, peerId);
+        if (!location) throw new ContactFailure('This user is not sharing a recent location.');
+      }
+      await this.createRequest(userId, peerId, '', groupId);
     } catch (error) {
       throw failure(error);
     }
   }
-  private async createRequest(userId: string, peerId: string, toEmail: string) {
+  private async createRequest(userId: string, peerId: string, toEmail: string, groupId?: string) {
     this.check(userId);
     const db = this.database();
     const auth = getFirebaseAuth().currentUser!;
@@ -281,6 +326,7 @@ export class FirebaseContactRepository implements ContactRepository {
       if (current.exists() && Date.now() - (current.data().updatedAt?.toMillis?.() ?? 0) < 60000)
         throw new ContactFailure('Wait a minute before sending another request.');
       transaction.set(reference, {
+        ...(groupId ? { groupId } : {}),
         fromId: userId,
         toId: peerId,
         fromName: ownProfile.data()?.fullName ?? auth.displayName ?? 'User',
@@ -313,7 +359,16 @@ export class FirebaseContactRepository implements ContactRepository {
               const data = item.data();
               return typeof data.name === 'string' &&
                 (data.kind === 'accepted' || data.kind === 'declined' || data.kind === 'removed')
-                ? [{ id: item.id, name: data.name, kind: data.kind } as ContactEvent]
+                ? [
+                    {
+                      id: item.id,
+                      name: data.name,
+                      actorId: data.actorId,
+                      version: Math.floor(data.createdAt.toMillis()),
+                      acknowledged: data.ackFor === Math.floor(data.createdAt.toMillis()),
+                      kind: data.kind,
+                    } as ContactEvent,
+                  ]
                 : [];
             }),
         );
@@ -328,6 +383,24 @@ export class FirebaseContactRepository implements ContactRepository {
     } catch (error) {
       throw failure(error);
     }
+  }
+  async acknowledge(
+    uid: string,
+    requests: readonly ContactRequest[],
+    events: readonly ContactEvent[],
+  ) {
+    this.check(uid);
+    const db = this.database();
+    await Promise.all([
+      ...requests
+        .filter((item) => !item.acknowledged && item.version !== undefined)
+        .map((item) => updateDoc(doc(db, 'contactRequests', item.id), { ackFor: item.version })),
+      ...events
+        .filter((item) => !item.acknowledged && item.version !== undefined)
+        .map((item) =>
+          updateDoc(doc(db, 'users', uid, 'contactEvents', item.id), { ackFor: item.version }),
+        ),
+    ]);
   }
   async respond(userId: string, request: ContactRequest, accept: boolean) {
     this.check(userId);
@@ -379,32 +452,56 @@ export class FirebaseContactRepository implements ContactRepository {
       throw failure(error);
     }
   }
-  async details(userId: string, contact: Contact): Promise<Contact> {
+  observeDetails(
+    userId: string,
+    contact: Contact,
+    next: (value: Contact) => void,
+    error: (reason: unknown) => void,
+  ) {
     this.check(userId);
-    if (!contact.peerId) return contact;
-    try {
-      const snapshot = await getDoc(doc(this.database(), 'users', contact.peerId));
-      this.check(userId);
-      if (!snapshot.exists()) return contact;
-      const p = snapshot.data();
-      let email = '';
-      if (contact.requestId) {
-        const request = await getDoc(doc(this.database(), 'contactRequests', contact.requestId));
-        this.check(userId);
-        const data = request.data();
-        if (data) email = data.fromId === contact.peerId ? data.fromEmail : data.toEmail;
-      }
-      return {
-        ...contact,
-        fullName: p.fullName,
-        email: typeof email === 'string' ? email : '',
-        birthday: p.birthday,
-        profileLocation: p.location,
-        avatarUrl: p.avatarUrl ?? null,
-      };
-    } catch (error) {
-      throw failure(error);
-    }
+    if (!contact.peerId) return () => {};
+    const db = this.database();
+    let active = true,
+      details = contact;
+    const publish = (fields: Partial<Contact>) => {
+      if (!active || getFirebaseAuth().currentUser?.uid !== userId) return;
+      details = { ...details, ...fields };
+      next(details);
+    };
+    const fail = (reason: unknown) => {
+      if (active && getFirebaseAuth().currentUser?.uid === userId) error(failure(reason));
+    };
+    const stopProfile = onSnapshot(
+      doc(db, 'users', contact.peerId),
+      (snapshot) => {
+        if (!snapshot.exists() && snapshot.metadata.fromCache) return;
+        const p = snapshot.data();
+        publish({
+          fullName: p?.fullName,
+          avatarUrl: p?.avatarUrl ?? null,
+          birthday: p?.birthday,
+          profileLocation: p?.location,
+        });
+      },
+      fail,
+    );
+    const stopEmail = contact.requestId
+      ? onSnapshot(
+          doc(db, 'contactRequests', contact.requestId),
+          (snapshot) => {
+            if (!snapshot.exists() && snapshot.metadata.fromCache) return;
+            const data = snapshot.data();
+            const email = data?.fromId === contact.peerId ? data?.fromEmail : data?.toEmail;
+            publish({ email: typeof email === 'string' ? email : '' });
+          },
+          fail,
+        )
+      : undefined;
+    return () => {
+      active = false;
+      stopProfile();
+      stopEmail?.();
+    };
   }
   async rename(userId: string, contact: Contact, nickname: string) {
     this.check(userId);
@@ -488,7 +585,7 @@ export class FirebaseContactRepository implements ContactRepository {
     let revision = 0;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let retryDelay = 2000;
-    const bounds = geohashQueryBounds([point.latitude, point.longitude], 5000);
+    const bounds = geohashQueryBounds([point.latitude, point.longitude], 1000);
     const rows = new Map<number, { id: string; data: DocumentData }[]>();
     const emit = () => {
       if (
@@ -498,19 +595,23 @@ export class FirebaseContactRepository implements ContactRepository {
         getFirebaseAuth().currentUser?.uid !== userId
       )
         return;
-      const users = new Map<string, SharedMapUser>();
+      const users = new Map<string, { user: SharedMapUser; distance: number }>();
       for (const list of rows.values())
         for (const row of list) {
           const user = shared(row.id, row.data, this.clock);
-          if (
-            user &&
-            user.id !== userId &&
-            user.expiresAt > Date.now() &&
-            distanceBetween([point.latitude, point.longitude], [user.latitude, user.longitude]) <= 5
-          )
-            users.set(user.id, user);
+          if (!user || user.id === userId || user.expiresAt <= Date.now()) continue;
+          const distance = distanceBetween(
+            [point.latitude, point.longitude],
+            [user.latitude, user.longitude],
+          );
+          if (distance <= 1) users.set(user.id, { user, distance });
         }
-      next([...users.values()]);
+      next(
+        [...users.values()]
+          .sort((a, b) => a.distance - b.distance || a.user.id.localeCompare(b.user.id))
+          .slice(0, 400)
+          .map((entry) => entry.user),
+      );
     };
     const subscribe = () => {
       const bucket = Math.floor(this.clock.now() / 120000);
@@ -529,13 +630,16 @@ export class FirebaseContactRepository implements ContactRepository {
             orderBy('geohash'),
             startAt(start),
             endAt(end),
-            limit(50),
+            limit(200),
           ),
+          { includeMetadataChanges: true },
           (snapshot) => {
             if (!active || subscription !== revision) return;
             rows.set(
               index,
-              snapshot.docs.map((item) => ({ id: item.id, data: item.data() })),
+              snapshot.metadata.fromCache
+                ? []
+                : snapshot.docs.map((item) => ({ id: item.id, data: item.data() })),
             );
             if (rows.size === bounds.length) retryDelay = 2000;
             emit();
@@ -551,6 +655,8 @@ export class FirebaseContactRepository implements ContactRepository {
     };
     const failed = (reason: unknown) => {
       if (!active || retry) return;
+      rows.clear();
+      next([]);
       retry = setTimeout(() => {
         retry = undefined;
         if (!active) return;
@@ -587,7 +693,7 @@ export class FirebaseContactRepository implements ContactRepository {
     try {
       await this.clock.synchronize();
       this.check(userId);
-      const snapshot = await getDoc(doc(this.database(), 'sharedLocations', peerId));
+      const snapshot = await getDocFromServer(doc(this.database(), 'sharedLocations', peerId));
       this.check(userId);
       return shared(peerId, snapshot.data(), this.clock);
     } catch (error) {
@@ -600,5 +706,27 @@ export class FirebaseContactRepository implements ContactRepository {
         return null;
       throw failure(error);
     }
+  }
+  observeSharedLocation(
+    userId: string,
+    peerId: string,
+    next: (location: SharedMapUser | null) => void,
+  ) {
+    this.check(userId);
+    let confirmed = false;
+    return onSnapshot(
+      doc(this.database(), 'sharedLocations', peerId),
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        if (getFirebaseAuth().currentUser?.uid !== userId) return;
+        if (snapshot.metadata.fromCache) {
+          if (confirmed) next(null);
+          return;
+        }
+        confirmed = true;
+        next(shared(peerId, snapshot.data(), this.clock));
+      },
+      () => next(null),
+    );
   }
 }

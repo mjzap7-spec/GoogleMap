@@ -1,6 +1,7 @@
 import type { LocationTracker, TravelPoint } from '../models/travel';
 /** Device GPS only. No routing API, location uploads, or background permission. */
 export class ExpoLocationTracker implements LocationTracker {
+  refresh?: () => void;
   async describe(point: TravelPoint) {
     try {
       const location = await import('expo-location');
@@ -74,8 +75,23 @@ export class ExpoLocationTracker implements LocationTracker {
           onError('Location updates stopped. Check GPS and permissions, then tap Resume.');
         },
       );
+      // Distance-based watches can stay silent when a traveler is standing still.
+      let requestingFix = false;
+      const refresh = () => {
+        if (!active || requestingFix) return;
+        requestingFix = true;
+        void location
+          .getCurrentPositionAsync({ accuracy: location.Accuracy.High })
+          .then(deliver)
+          .catch(() => {}) // A failed one-off fix leaves the foreground watch running.
+          .finally(() => {
+            requestingFix = false;
+          });
+      };
+      this.refresh = refresh;
       return () => {
         active = false;
+        if (this.refresh === refresh) this.refresh = undefined;
         subscription.remove();
       };
     } catch (error) {

@@ -1,5 +1,6 @@
 import { ContactsIcon } from './ContactsIcon';
-import { HelpIcon } from './HelpIcon';
+import { ChatIcon } from './ChatIcon';
+import { chatButtonLabel } from './UnreadBadge';
 import { useTranslation } from '../i18n/LanguageProvider';
 import React, { useEffect, useState, type ReactNode } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -118,7 +119,7 @@ function ActiveIcon({ progress, children }: { progress: Animated.Value; children
     </View>
   );
 }
-export function AppToolbar({
+export const AppToolbar = React.memo(function AppToolbar({
   recording,
   onToggleRecording,
   recordingDisabled,
@@ -127,7 +128,8 @@ export function AppToolbar({
   onSettings,
   onHome,
   onContacts,
-  onHelp,
+  onChat,
+  unread,
   activePage,
 }: {
   recording: boolean;
@@ -138,8 +140,9 @@ export function AppToolbar({
   onSettings: () => void;
   onHome: () => void;
   onContacts: () => void;
-  onHelp: () => void;
-  activePage: 'home' | 'contacts' | 'settings' | 'help';
+  onChat: () => void;
+  unread: number;
+  activePage: 'home' | 'contacts' | 'settings' | 'chat' | 'help';
 }) {
   const { t } = useTranslation();
 
@@ -147,7 +150,7 @@ export function AppToolbar({
   const contactsProgress = useProgress(activePage === 'contacts', enabled);
   const homeProgress = useProgress(activePage === 'home', enabled);
   const settingsProgress = useProgress(activePage === 'settings', enabled);
-  const helpProgress = useProgress(activePage === 'help', enabled);
+  const chatProgress = useProgress(activePage === 'chat', enabled);
   const recordingProgress = useProgress(recording, enabled);
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(bottomInset, 12) }]}>
@@ -217,13 +220,13 @@ export function AppToolbar({
               </ToolbarButton>
             ) : (
               <ToolbarButton
-                label={t('Help')}
-                selected={activePage === 'help'}
+                label={chatButtonLabel(t, t('Chats'), unread)}
+                selected={activePage === 'chat'}
                 enabled={enabled}
-                onPress={onHelp}
+                onPress={onChat}
               >
-                <ActiveIcon progress={helpProgress}>
-                  <HelpIcon />
+                <ActiveIcon progress={chatProgress}>
+                  <ChatIcon unread={unread} />
                 </ActiveIcon>
               </ToolbarButton>
             )}
@@ -232,7 +235,7 @@ export function AppToolbar({
       </View>
     </View>
   );
-}
+});
 const styles = StyleSheet.create({
   bar: {
     backgroundColor: colors.background,

@@ -63,6 +63,45 @@ test('email normalization and request form reject invalid input and prevent dupl
   assert.match(model.getSnapshot().notice, /sent/);
   model.dispose();
 });
+test('each outgoing contact request confirms once across screens, including requests from the map', async (t) => {
+  const requests = [];
+  const confirmations = [];
+  const model = new ContactsViewModel(
+    repository({
+      sendRequest: async (_id, email) => requests.push(email),
+      sendRequestToUser: async (_id, peer) => requests.push(peer),
+    }),
+    'me',
+  );
+  t.after(() => model.dispose());
+  model.start();
+  const observe = () => model.observeNotices((message) => confirmations.push(message));
+  const leave = observe();
+  const leaveSecondObserver = observe();
+  model.openForm();
+  model.setEmail('friend@example.com');
+  await model.sendRequest();
+  leave();
+  leaveSecondObserver();
+  const leaveNextScreen = observe();
+  model.closeMapUser();
+  assert.deepEqual(confirmations, ['Contact request sent.']);
+
+  model.setShowNearby(true);
+  model.selectSharedUser({
+    id: 'another-friend',
+    nickname: 'Another friend',
+    ...point,
+    expiresAt: Date.now() + 60_000,
+  });
+  await model.requestSelectedUser();
+  await model.requestSelectedUser();
+  leaveNextScreen();
+  const leaveOnReturn = observe();
+  t.after(leaveOnReturn);
+  assert.deepEqual(requests, ['friend@example.com', 'another-friend']);
+  assert.deepEqual(confirmations, ['Contact request sent.', 'Contact request sent.']);
+});
 test('requests notify once and only confirmed responses remove a pending request', async () => {
   let notify;
   let fail = true;
@@ -169,6 +208,7 @@ test('contact nickname selection focuses a recent shared location and reports mi
     'me',
   );
   model.start();
+  model.setShowNearby(true);
   await model.locateContact(contact);
   assert.equal(model.getSnapshot().focus.nickname, 'Friend');
   const first = model.getSnapshot().focus.revision;
@@ -189,7 +229,10 @@ test('contact editor changes only the private nickname and never overwrites a di
         next([contact]);
         return () => {};
       },
-      details: async (_id, value) => value,
+      observeDetails: (_id, value, next) => {
+        next(value);
+        return () => {};
+      },
       rename: async (...args) => saves.push(args),
     }),
     'me',
@@ -203,6 +246,16 @@ test('contact editor changes only the private nickname and never overwrites a di
   await model.save();
   assert.equal(saves[0][2], 'Best friend');
   assert.equal(model.getSnapshot().contact.birthday, '2000-01-01');
+  assert.equal(model.getSnapshot().done, true);
+  model.dispose();
+});
+test('saving an unchanged contact nickname finishes without a Firestore write', async () => {
+  let writes = 0;
+  const model = new ContactEditorViewModel(repository({ rename: async () => writes++ }), 'me', 'a');
+  model.start();
+  model.setNickname(' ' + contact.name + ' ');
+  await model.save();
+  assert.equal(writes, 0);
   assert.equal(model.getSnapshot().done, true);
   model.dispose();
 });
@@ -333,6 +386,7 @@ test('contact location focus survives returning from the contact manager to the 
     'me',
   );
   model.start();
+  model.setShowNearby(true);
   await model.locateContact(contact);
   model.setPosition(null, false);
   assert.equal(model.getSnapshot().focus.id, 'a');
@@ -691,4 +745,67 @@ test('selecting an already visible contact immediately centers on its fresh loca
   );
   assert.equal(reads, 0);
   model.dispose();
+});
+
+test('a revoked public location clears an already focused contact and an old listener cannot restore it', async (t) => {
+  const location = {
+    id: 'a',
+    nickname: 'Alice',
+    avatarUrl: null,
+    ...point,
+    expiresAt: Date.now() + 60000,
+  };
+  let receive;
+  let stopped = 0;
+  const model = new ContactsViewModel(
+    repository({
+      sharedLocation: async () => location,
+      observeSharedLocation: (_, id, next) => {
+        assert.equal(id, 'a');
+        receive = next;
+        return () => {
+          stopped++;
+        };
+      },
+    }),
+    'outside',
+  );
+  t.after(model.dispose);
+  model.start();
+  model.setShowNearby(true);
+  await model.locateContact(contact);
+  model.selectMapUser('a');
+  assert.equal(model.getSnapshot().focus.id, 'a');
+  receive(null);
+  receive(location);
+  assert.equal(stopped, 1);
+  assert.equal(model.getSnapshot().focus, null);
+  assert.equal(model.getSnapshot().selectedUser, null);
+});
+
+test('switching off hides a pending contact lookup even if viewing is switched on again', async (t) => {
+  let resolveLocation;
+  let reads = 0;
+  const model = new ContactsViewModel(
+    repository({
+      sharedLocation: () => {
+        reads++;
+        return new Promise((resolve) => {
+          resolveLocation = resolve;
+        });
+      },
+    }),
+    'viewer',
+  );
+  t.after(model.dispose);
+  model.start();
+  await model.locateContact(contact);
+  assert.equal(reads, 0);
+  model.setShowNearby(true);
+  const lookup = model.locateContact(contact);
+  model.setShowNearby(false);
+  model.setShowNearby(true);
+  resolveLocation({ id: 'a', nickname: 'A', ...point, expiresAt: Date.now() + 60000 });
+  await lookup;
+  assert.equal(model.getSnapshot().focus, null);
 });

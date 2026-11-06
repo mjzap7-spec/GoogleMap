@@ -48,8 +48,14 @@ async function fixture(t, offset = 0, tokenRefresh) {
         startAt: (v) => v,
         endAt: (v) => v,
         limit: (v) => v,
-        onSnapshot: (q, next, error) => {
-          const listener = { q, next, error, stopped: false };
+        onSnapshot: (q, options, next, error) => {
+          assert.equal(options.includeMetadataChanges, true);
+          const listener = {
+            q,
+            next: (snap) => next({ metadata: { fromCache: false }, ...snap }),
+            error,
+            stopped: false,
+          };
           listeners.push(listener);
           return () => {
             listener.stopped = true;
@@ -97,7 +103,11 @@ test('failed nearby listener reconnects in the same bucket and ignores callbacks
   f.listeners[1].next({ docs: [] });
   assert.equal(f.errors.length, 1);
   assert.equal(f.errors[0].message, 'Nearby access was denied. Tap Retry.');
-  assert.equal(f.updates.length, 0, 'partial results cannot hide a failed range');
+  assert.deepEqual(
+    f.updates,
+    [[]],
+    'a failed range clears markers and partial results cannot restore them',
+  );
   t.mock.timers.tick(2000);
   await flush();
   assert.equal(f.listeners.length, 4, 'retry does not wait for the two-minute bucket rollover');
@@ -115,6 +125,15 @@ test('failed nearby listener reconnects in the same bucket and ignores callbacks
     f.updates.at(-1).map((user) => user.id),
     ['bob'],
   );
+});
+test('cached public coordinates cannot restore a marker after it was withdrawn', async (t) => {
+  const f = await fixture(t);
+  f.listeners[0].next({ docs: [f.row('bob')] });
+  f.listeners[1].next({ docs: [] });
+  assert.equal(f.updates.at(-1)[0].id, 'bob');
+  f.listeners[0].next({ docs: [] });
+  f.listeners[0].next({ docs: [f.row('bob')], metadata: { fromCache: true } });
+  assert.deepEqual(f.updates.at(-1), []);
 });
 test('nearby retry backs off and unsubscribing cancels pending reconnection', async (t) => {
   const f = await fixture(t);

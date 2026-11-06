@@ -107,6 +107,7 @@ test('unchanged Firestore metadata does not redraw contacts but nickname changes
   });
   f.emit([row('Alex')]);
   f.emit([row('Alex')]);
+  f.emit([{ ...row('New nickname'), metadata: { hasPendingWrites: true } }]);
   assert.equal(updates.length, 1);
   f.emit([row('New nickname')]);
   assert.equal(updates.length, 2);

@@ -12,25 +12,34 @@ export class ContactEditorViewModel extends ObservableViewModel<ContactEditorSta
   private detailVersion = 0;
   private generation = 0;
   private stop?: () => void;
+  private stopDetails?: () => void;
   private dirty = false;
   constructor(
     private repository: ContactRepository,
     private userId: string,
     private contactId: string,
+    private observe: ContactRepository['observe'] = repository.observe.bind(repository),
   ) {
     super({ contact: null, nickname: '', loading: true, action: '', error: '', done: false });
   }
   start = () => {
     this.stop?.();
+    this.stopDetails?.();
     const generation = ++this.generation;
     this.update({ loading: true, error: '' });
-    this.stop = this.repository.observe(
+    let detailIdentity: string | undefined;
+    let refreshed: Contact | undefined;
+    this.stop = this.observe(
       this.userId,
       (contacts) => {
         if (generation !== this.generation) return;
-        const detailVersion = ++this.detailVersion;
         const contact = contacts.find((item) => item.id === this.contactId);
         if (!contact) {
+          this.detailVersion++;
+          this.stopDetails?.();
+          this.stopDetails = undefined;
+          detailIdentity = undefined;
+          refreshed = undefined;
           this.update({
             contact: null,
             loading: false,
@@ -38,22 +47,33 @@ export class ContactEditorViewModel extends ObservableViewModel<ContactEditorSta
           });
           return;
         }
+        const identity = JSON.stringify([contact.peerId, contact.requestId]);
+        if (detailIdentity !== identity) refreshed = undefined;
         this.update({
-          contact,
+          contact: refreshed ? { ...refreshed, name: contact.name } : contact,
           loading: false,
           ...(!this.dirty ? { nickname: contact.name } : {}),
         });
-        if (this.repository.details)
-          void this.repository
-            .details(this.userId, contact)
-            .then((details) => {
-              if (generation === this.generation && detailVersion === this.detailVersion)
-                this.update({ contact: details });
-            })
-            .catch((error) => {
-              if (generation === this.generation)
-                this.update({ error: contactErrorMessage(error) });
-            });
+        if (detailIdentity === identity) return;
+        detailIdentity = identity;
+        const detailVersion = ++this.detailVersion;
+        this.stopDetails?.();
+        this.stopDetails = this.repository.observeDetails?.(
+          this.userId,
+          contact,
+          (details) => {
+            if (generation === this.generation && detailVersion === this.detailVersion) {
+              refreshed = details;
+              this.update({
+                contact: { ...details, name: this.state.contact?.name ?? details.name },
+              });
+            }
+          },
+          (error) => {
+            if (generation === this.generation && detailVersion === this.detailVersion)
+              this.update({ error: contactErrorMessage(error) });
+          },
+        );
       },
       (error) => {
         if (generation === this.generation)
@@ -72,6 +92,10 @@ export class ContactEditorViewModel extends ObservableViewModel<ContactEditorSta
     const nickname = this.state.nickname.trim();
     if (!nickname || nickname.length > 100) {
       this.update({ error: 'Enter a nickname (up to 100 characters).' });
+      return;
+    }
+    if (nickname === this.state.contact.name) {
+      this.update({ done: true, error: '' });
       return;
     }
     const generation = this.generation;
@@ -103,5 +127,7 @@ export class ContactEditorViewModel extends ObservableViewModel<ContactEditorSta
   dispose = () => {
     this.generation++;
     this.stop?.();
+    this.stopDetails?.();
+    this.stopDetails = undefined;
   };
 }

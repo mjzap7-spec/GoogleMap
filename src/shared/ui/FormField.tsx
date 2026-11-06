@@ -1,6 +1,6 @@
 import { useTranslation } from '../i18n/LanguageProvider';
 import React, { type ReactNode } from 'react';
-import { Text, View, type TextInputProps } from 'react-native';
+import { Text, View } from 'react-native';
 import { TextField } from './TextField';
 import { ui } from './styles';
 
@@ -8,7 +8,7 @@ export function FormField({
   label,
   labelAccessory,
   ...props
-}: TextInputProps & { label: string; labelAccessory?: ReactNode }) {
+}: React.ComponentProps<typeof TextField> & { label: string; labelAccessory?: ReactNode }) {
   const { t } = useTranslation();
   return (
     <>

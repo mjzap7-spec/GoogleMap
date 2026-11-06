@@ -1,7 +1,8 @@
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { isProjectMetro } = require('./metro-server.cjs');
 
 const projectRoot = path.resolve(__dirname, '..');
 const packageName = 'com.anonymous.nestauth';
@@ -26,7 +27,7 @@ function setMetroHost(xml, port) {
   return xml.replace('</map>', `${setting}</map>`);
 }
 
-async function main() {
+async function main(sharedPort, { bootMissing = false } = {}) {
   const candidates = [
     process.env.ANDROID_HOME,
     process.env.ANDROID_SDK_ROOT,
@@ -45,31 +46,57 @@ async function main() {
       stdio: ['pipe', 'pipe', 'pipe'],
       ...options,
     });
-  const targets = parseDevices(adb(['devices'])).flatMap((serial) => {
-    const name = adb(['-s', serial, 'emu', 'avd', 'name']).split(/\r?\n/)[0].trim();
-    return ports[name] ? [{ serial, name, port: ports[name] }] : [];
-  });
+  const findTargets = () =>
+    parseDevices(adb(['devices'])).flatMap((serial) => {
+      const name = adb(['-s', serial, 'emu', 'avd', 'name']).split(/\r?\n/)[0].trim();
+      return ports[name] ? [{ serial, name, port: sharedPort ?? ports[name] }] : [];
+    });
+  let targets = findTargets();
+  if (bootMissing) {
+    const emulator = path.resolve(adbPath, '../../emulator/emulator.exe');
+    const installedAvds = execFileSync(emulator, ['-list-avds'], {
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+      .trim()
+      .split(/\r?\n/);
+    for (const name of Object.keys(ports)) {
+      if (targets.some((target) => target.name === name)) continue;
+      if (!installedAvds.includes(name))
+        throw new Error(`Create ${name} in Android Studio Device Manager first.`);
+      console.log(`Starting ${name}...`);
+      const args = ['-avd', name];
+      if (name === 'Pixel_8a') args.push('-feature', '-WiFiPacketStream', '-no-snapshot-load');
+      const child = spawn(emulator, args, { detached: true, windowsHide: true, stdio: 'ignore' });
+      await new Promise((resolve, reject) => {
+        child.once('spawn', resolve);
+        child.once('error', reject);
+      });
+      child.unref();
+      // Wait for each AVD to claim its console port before starting the next.
+      const deadline = Date.now() + 180000;
+      while (true) {
+        targets = findTargets();
+        const target = targets.find((item) => item.name === name);
+        if (
+          target &&
+          adb(['-s', target.serial, 'shell', 'getprop', 'sys.boot_completed']).trim() === '1'
+        )
+          break;
+        if (Date.now() >= deadline)
+          throw new Error(`${name} did not finish starting. Check Device Manager.`);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+  }
   if (!targets.length)
     throw new Error('Start Pixel_8a or Pixel_8, wait for Android to boot, then retry.');
 
   // Validate all servers before stopping an app or changing its preferences.
-  for (const { port } of targets) {
-    let response;
-    try {
-      response = await fetch(`http://127.0.0.1:${port}/status`, {
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!response.ok || (await response.text()).trim() !== 'packager-status:running')
-        throw new Error();
-    } catch {
+  for (const port of new Set(targets.map((target) => target.port))) {
+    if (!(await isProjectMetro(port, projectRoot)))
       throw new Error(
-        `Start Metro in another terminal: npx expo start --dev-client --port ${port}`,
-      );
-    }
-    const root = response.headers.get('x-react-native-project-root');
-    if (!root || path.resolve(decodeURIComponent(root)).toLowerCase() !== projectRoot.toLowerCase())
-      throw new Error(
-        `Port ${port} is not serving ${projectRoot}. Start this project's Metro server there.`,
+        `Metro on ${port} is not responding for ${projectRoot}. Run npm run android:dev to reconnect both apps.`,
       );
   }
   for (const { serial, name, port } of targets) {
@@ -85,6 +112,7 @@ async function main() {
       xml = '<map></map>';
     }
     const updated = setMetroHost(xml, port);
+    adb(['-s', serial, 'shell', 'run-as', packageName, 'mkdir', '-p', 'shared_prefs']);
     adb(['-s', serial, 'shell', `run-as ${packageName} sh -c 'cat > ${preferences}'`], {
       input: updated,
     });
@@ -107,7 +135,7 @@ async function main() {
   }
 }
 
-module.exports = { parseDevices, setMetroHost };
+module.exports = { parseDevices, setMetroHost, openEmulators: main };
 if (require.main === module)
   main().catch((error) => {
     console.error(error.message);

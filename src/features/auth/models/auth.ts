@@ -7,6 +7,8 @@ export interface AuthUser {
   readonly location?: string;
   readonly avatarUrl?: string | null;
   readonly profileStatus?: 'loading' | 'ready' | 'error';
+  /** Give the initial profile watch priority over background social listeners. */
+  readonly profileSyncPending?: boolean;
 }
 export interface AvatarSelection {
   readonly uri: string;

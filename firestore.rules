@@ -26,6 +26,48 @@ service cloud.firestore {
    }
    allow create: if own(userId) && validProfile() && request.resource.data.createdAt == request.time;
    allow update: if own(userId) && validProfile() && request.resource.data.createdAt == resource.data.createdAt;
+   match /preferences/{preferenceId} {
+    allow read: if own(userId);
+    allow create, update: if own(userId) && preferenceId == 'sharing'
+     && request.resource.data.keys().hasOnly(['nearby','groups'])
+     && request.resource.data.nearby is bool && request.resource.data.groups is bool
+     && !(request.resource.data.nearby && request.resource.data.groups)
+     && (request.resource.data.nearby || !existsAfter(/databases/$(database)/documents/sharedLocations/$(userId)));
+   }
+   match /formerGroups/{groupId} {
+    function leftGroup() {
+     let path = /databases/$(database)/documents/privateGroups/$(groupId);
+     let before = get(path).data;
+     let after = getAfter(path).data;
+     return userId in before.joinedIds && before.ownerId != userId
+      && !(userId in after.memberIds) && !(userId in after.joinedIds)
+      && request.resource.data.keys().hasOnly(['name']) && request.resource.data.name == before.name;
+    }
+    allow read, delete: if own(userId);
+    allow create, update: if own(userId) && leftGroup();
+   }
+   match /chatReads/{threadId} {
+    allow read: if own(userId);
+    function validRead() {
+     return own(userId) && request.resource.data.keys().hasOnly(['through'])
+      && request.resource.data.through is timestamp && request.resource.data.through <= request.time;
+    }
+    allow create: if validRead();
+    allow update: if validRead() && request.resource.data.through >= resource.data.through;
+   }
+   match /chatInbox/{peerId} {
+    allow read: if own(userId);
+    function validPreview() {
+     let d = request.resource.data;
+     let thread = get(/databases/$(database)/documents/users/$(userId)/contacts/$(peerId)).data.requestId;
+     let msg = getAfter(/databases/$(database)/documents/contactRequests/$(thread)/messages/$(d.messageId)).data;
+     return d.keys().hasOnly(['messageId','requestId','text','updatedAt']) && d.requestId == thread
+      && d.text == msg.text && d.updatedAt == request.time
+      && msg.createdAt == request.time && msg.fromId == request.auth.uid;
+    }
+    allow create, update: if signedIn() && request.auth.uid in [userId,peerId]
+     && connected(userId,peerId) && validPreview();
+   }
    match /contactEvents/{eventId} {
     allow read, delete: if own(userId);
     function validEvent() {
@@ -49,6 +91,8 @@ service cloud.firestore {
       && !existsAfter(/databases/$(database)/documents/users/$(d.actorId)/contacts/$(userId));
     }
     allow create: if validEvent() && (responseEvent() || removedEvent());
+    allow update: if own(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ackFor'])
+     && request.resource.data.ackFor == resource.data.createdAt.toMillis();
    }
    match /contacts/{contactId} {
     allow read: if own(userId);
@@ -84,6 +128,19 @@ service cloud.firestore {
    allow delete: if signedIn() && resource.data.uid == request.auth.uid;
   }
   match /contactRequests/{requestId} {
+   match /messages/{messageId} {
+    function canChat() {
+     let pair = get(/databases/$(database)/documents/contactRequests/$(requestId)).data;
+     return signedIn() && request.auth.uid in [pair.fromId,pair.toId] && pair.status == 'accepted'
+      && connected(pair.fromId,pair.toId)
+      && get(/databases/$(database)/documents/users/$(pair.fromId)/contacts/$(pair.toId)).data.requestId == requestId;
+    }
+    allow read: if canChat();
+    allow create: if canChat() && request.resource.data.keys().hasOnly(['fromId','text','createdAt'])
+     && request.resource.data.fromId == request.auth.uid && request.resource.data.createdAt == request.time
+     && request.resource.data.text is string && request.resource.data.text.size()>0
+     && request.resource.data.text.size()<=2000 && request.resource.data.text.matches('(?s).*\\S.*');
+   }
    allow get: if signedIn() && (!exists(/databases/$(database)/documents/contactRequests/$(requestId)) || resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
    allow list: if signedIn() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid) && request.query.limit <= 100;
    function visibleTarget(uid) {
@@ -92,19 +149,26 @@ service cloud.firestore {
     return exists(/databases/$(database)/documents/users/$(uid))
      && presence.bucket >= bucket-1 && presence.bucket <= bucket;
    }
+   function sharedGroupTarget(data) {
+    let group=get(/databases/$(database)/documents/privateGroups/$(data.groupId)).data;
+    return data.fromId in group.joinedIds && data.toId in group.joinedIds;
+   }
    function validRequest() {
     let d=request.resource.data;
     let reverse=d.toId+'_'+d.fromId;
-    return signedIn() && d.keys().hasOnly(['fromId','toId','fromName','fromEmail','toEmail','status','createdAt','updatedAt'])
+    return signedIn() && d.keys().hasOnly(['groupId','fromId','toId','fromName','fromEmail','toEmail','status','createdAt','updatedAt'])
      && d.fromId == request.auth.uid && d.fromId != d.toId && requestId == d.fromId+'_'+d.toId
      && d.fromEmail == request.auth.token.email.lower() && d.fromName == profile(d.fromId).fullName
-     && d.toEmail is string && ((d.toEmail == '' && visibleTarget(d.toId))
+     && d.toEmail is string && ((d.toEmail == '' && (('groupId' in d && sharedGroupTarget(d)) || (!('groupId' in d) && visibleTarget(d.toId))))
      || (d.toEmail != '' && get(/databases/$(database)/documents/contactDirectory/$(d.toEmail)).data.uid == d.toId))
      && d.status == 'pending' && d.updatedAt == request.time
      && !exists(/databases/$(database)/documents/users/$(d.fromId)/contacts/$(d.toId))
      && (!exists(/databases/$(database)/documents/contactRequests/$(reverse)) || get(/databases/$(database)/documents/contactRequests/$(reverse)).data.status != 'pending');
    }
    allow create: if validRequest() && request.resource.data.createdAt == request.time;
+   allow update: if signedIn() && resource.data.toId==request.auth.uid && resource.data.status=='pending'
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ackFor'])
+    && request.resource.data.ackFor==resource.data.updatedAt.toMillis();
    allow update: if (validRequest() && resource.data.status != 'pending'
       && request.time > resource.data.updatedAt + duration.value(1,'m')
       && request.resource.data.createdAt == resource.data.createdAt
@@ -117,12 +181,128 @@ service cloud.firestore {
        && getAfter(/databases/$(database)/documents/users/$(resource.data.fromId)/contacts/$(resource.data.toId)).data.requestId == requestId
        && getAfter(/databases/$(database)/documents/users/$(resource.data.toId)/contacts/$(resource.data.fromId)).data.requestId == requestId)));
   }
+  match /groupDirectory/{groupId} {
+   function groupPath() { return /databases/$(database)/documents/privateGroups/$(groupId); }
+   function listing() {
+    let group=getAfter(groupPath()).data;
+    let d=request.resource.data;
+    return group.ownerId==request.auth.uid && d.keys().hasOnly(['active','name','createdAt','creatorName','memberCount'])
+     && d.active==true && d.name==group.name && d.createdAt==request.time
+     && d.creatorName==profile(request.auth.uid).fullName && d.memberCount is int && d.memberCount==group.joinedIds.size();
+   }
+   function membershipCount() {
+    let after=getAfter(groupPath()).data;
+    return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberCount'])
+     && request.resource.data.memberCount is int && request.resource.data.memberCount==after.joinedIds.size()
+     && (request.auth.uid in after.joinedIds || request.auth.uid in get(groupPath()).data.joinedIds);
+   }
+   function retired() {
+    return request.resource.data.keys().hasOnly(['active']) && request.resource.data.active==false
+     && get(groupPath()).data.ownerId==request.auth.uid && !existsAfter(groupPath());
+   }
+   allow get, list: if signedIn() && resource.data.active==true;
+   allow create: if signedIn() && (listing() || retired());
+   allow update: if signedIn() && resource.data.active && (retired() || membershipCount());
+  }
+  match /privateGroups/{groupId} {
+   function directoryPath(){return /databases/$(database)/documents/groupDirectory/$(groupId);}
+   function invited() { return signedIn() && request.auth.uid in resource.data.memberIds; }
+   function joined() { return signedIn() && request.auth.uid in get(/databases/$(database)/documents/privateGroups/$(groupId)).data.joinedIds; }
+   function validGroup() {
+    let d=request.resource.data;
+    return d.keys().hasOnly(['name','ownerId','memberIds','joinedIds']) && nameValid(d.name) && d.name.size()<=60
+     && d.memberIds is list && d.joinedIds is list && d.memberIds.size()<=10
+     && d.memberIds.toSet().size()==d.memberIds.size() && d.joinedIds.toSet().size()==d.joinedIds.size()
+     && d.joinedIds.toSet().hasOnly(d.memberIds) && d.ownerId in d.joinedIds;
+   }
+   function inviteContact() {
+    let added=request.resource.data.memberIds.removeAll(resource.data.memberIds);
+    return resource.data.ownerId==request.auth.uid
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
+     && request.resource.data.memberIds.hasAll(resource.data.memberIds) && added.size()==1
+     && connected(request.auth.uid,added[0]);
+   }
+   function acceptInvitation() {
+    return invited() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['joinedIds'])
+     && request.resource.data.joinedIds==resource.data.joinedIds.concat([request.auth.uid])
+     && !(request.auth.uid in resource.data.joinedIds);
+   }
+   function leaveGroup() {
+    return invited() && request.auth.uid!=resource.data.ownerId
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','joinedIds'])
+     && request.resource.data.memberIds==resource.data.memberIds.removeAll([request.auth.uid])
+     && request.resource.data.joinedIds==resource.data.joinedIds.removeAll([request.auth.uid]);
+   }
+   function joinFromDirectory() {
+    let uid=request.auth.uid;
+    return get(directoryPath()).data.active && !(uid in resource.data.memberIds)
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','joinedIds'])
+     && request.resource.data.memberIds==resource.data.memberIds.concat([uid])
+     && request.resource.data.joinedIds==resource.data.joinedIds.concat([uid]);
+   }
+   allow get, list: if invited();
+   allow create: if signedIn() && validGroup() && request.resource.data.ownerId==request.auth.uid
+    && request.resource.data.memberIds==[request.auth.uid] && request.resource.data.joinedIds==[request.auth.uid]
+    && !exists(directoryPath()) && getAfter(directoryPath()).data.active==true;
+   allow update: if signedIn() && validGroup() && (inviteContact() || acceptInvitation() || leaveGroup() || joinFromDirectory())
+    && (resource.data.joinedIds == request.resource.data.joinedIds
+     || getAfter(directoryPath()).data.memberCount == request.resource.data.joinedIds.size());
+   allow delete: if signedIn() && resource.data.ownerId==request.auth.uid && getAfter(directoryPath()).data.active==false;
+   match /members/{memberId} {
+    allow read: if joined();
+    allow create, update: if own(memberId)
+     && memberId in getAfter(/databases/$(database)/documents/privateGroups/$(groupId)).data.joinedIds
+     && request.resource.data.keys().hasOnly(['name','avatarUrl'])
+     && request.resource.data.name==profile(memberId).fullName && request.resource.data.avatarUrl==profile(memberId).avatarUrl;
+    allow delete: if own(memberId);
+   }
+   match /memberChats/{first}/with/{second}/messages/{messageId} {
+    function pairMember() {
+     let members=get(/databases/$(database)/documents/privateGroups/$(groupId)).data.joinedIds;
+     return signedIn() && request.auth.uid in [first,second] && first < second
+      && first in members && second in members;
+    }
+    allow read: if pairMember();
+    allow create: if pairMember() && request.resource.data.keys().hasOnly(['fromId','text','createdAt'])
+     && request.resource.data.fromId==request.auth.uid && request.resource.data.createdAt==request.time
+     && request.resource.data.text is string && request.resource.data.text.size()<=2000
+     && request.resource.data.text.matches('(?s).*\\S.*');
+   }
+   match /messages/{messageId} {
+    allow read: if joined();
+    allow create: if joined() && request.resource.data.keys().hasOnly(['fromId','senderName','text','createdAt'])
+     && request.resource.data.fromId==request.auth.uid && request.resource.data.senderName==profile(request.auth.uid).fullName
+     && request.resource.data.createdAt==request.time && request.resource.data.text is string
+     && request.resource.data.text.size()<=2000 && request.resource.data.text.matches('(?s).*\\S.*');
+   }
+   match /live/{memberId} {
+    allow read: if joined();
+    allow delete: if own(memberId);
+    allow create, update: if own(memberId) && joined()
+     && request.resource.data.keys().hasOnly(['nickname','avatarUrl','latitude','longitude','trip','trail','updatedAt'])
+     && request.resource.data.nickname==profile(memberId).fullName
+     && request.resource.data.avatarUrl==profile(memberId).avatarUrl
+     && request.resource.data.latitude is number && request.resource.data.latitude>=-90 && request.resource.data.latitude<=90
+     && request.resource.data.longitude is number && request.resource.data.longitude>=-180 && request.resource.data.longitude<=180
+     && request.resource.data.trip is bool && request.resource.data.trail is string && request.resource.data.trail.size()<=100000
+     && (request.resource.data.trip || get(/databases/$(database)/documents/users/$(memberId)/preferences/sharing).data.groups==true)
+     && request.resource.data.updatedAt==request.time;
+   }
+  }
   match /sharedLocations/{userId} {
    function currentBucket() { return int(request.time.toMillis() / 120000); }
    function fresh() { return resource.data.bucket >= currentBucket()-1 && resource.data.bucket <= currentBucket(); }
-   allow get: if signedIn() && (!exists(/databases/$(database)/documents/sharedLocations/$(userId)) || fresh());
-   allow list: if signedIn() && fresh() && request.query.limit <= 50;
-   allow create, update: if own(userId) && request.resource.data.keys().hasOnly(['nickname','avatarUrl','latitude','longitude','geohash','bucket','updatedAt'])
+   function publicAudience() {
+    let path = /databases/$(database)/documents/users/$(userId)/preferences/sharing;
+    return !exists(path) || (get(path).data.nearby == true && get(path).data.groups == false);
+   }
+   allow get: if signedIn() && (!exists(/databases/$(database)/documents/sharedLocations/$(userId)) || (fresh() && publicAudience()));
+   allow list: if signedIn() && fresh() && request.query.limit <= 200;
+   allow create, update: if own(userId)
+    && (!existsAfter(/databases/$(database)/documents/users/$(userId)/preferences/sharing)
+     || (getAfter(/databases/$(database)/documents/users/$(userId)/preferences/sharing).data.nearby == true
+      && getAfter(/databases/$(database)/documents/users/$(userId)/preferences/sharing).data.groups == false))
+    && request.resource.data.keys().hasOnly(['nickname','avatarUrl','latitude','longitude','geohash','bucket','updatedAt'])
     && request.resource.data.nickname == profile(userId).fullName && avatarValid(request.resource.data.avatarUrl) && request.resource.data.avatarUrl == profile(userId).avatarUrl
     && request.resource.data.latitude is number && request.resource.data.latitude >= -90 && request.resource.data.latitude <= 90
     && request.resource.data.longitude is number && request.resource.data.longitude >= -180 && request.resource.data.longitude <= 180

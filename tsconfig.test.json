@@ -11,6 +11,10 @@
     "types": ["node"]
   },
   "include": [
+    "src/features/chat/data/**/*.ts",
+    "src/features/chat/models/**/*.ts",
+    "src/features/help/models/**/*.ts",
+    "src/shared/feedback/**/*.ts",
     "src/config/firebase/firestore.native.ts",
     "src/features/map/models/**/*.ts",
     "src/features/map/viewmodels/**/*.ts",

@@ -1,11 +1,24 @@
+import { useMapViewModel } from '../../map/bindings/MapProvider';
+import { PrivateGroups } from './PrivateGroups';
+import { useUnreadChats } from '../../chat/bindings/UnreadChatsProvider';
+import { usePersonChats } from '../../chat/bindings/usePersonChats';
+import { openPersonChat } from '../../chat/screens/openPersonChat';
+import { useSharing } from '../bindings/SharingProvider';
 import React, { useRef, useEffect } from 'react';
-import { router, useIsFocused } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useContactsContext } from '../bindings/ContactsProvider';
 import { ManageContactsView } from '../views/ManageContactsView';
 import { PageSurface } from '../../../shared/motion/PageSurface';
 import { usePageTransition } from '../../../shared/motion/usePageTransition';
 export function ManageContactsScreen() {
   const { state, commands, model } = useContactsContext();
+  const map = useMapViewModel();
+  const { section } = useLocalSearchParams<{ section?: string }>();
+  const sharing = useSharing();
+  const personChats = usePersonChats();
+  const {
+    state: { counts },
+  } = useUnreadChats();
   const transition = usePageTransition();
   const focused = useIsFocused();
   const active = useRef(focused);
@@ -18,15 +31,34 @@ export function ManageContactsScreen() {
   return (
     <PageSurface transition={transition}>
       <ManageContactsView
+        tab={section === 'groups' ? 'groups' : 'contacts'}
+        setTab={(tab) => router.setParams({ section: tab })}
+        groups={<PrivateGroups unreadChats={counts} />}
+        invitations={
+          sharing.state.groups.filter((group) => !group.joinedIds.includes(sharing.model.user.id))
+            .length
+        }
         onBack={() => transition.navigate(() => router.navigate('/'))}
         contacts={{
           state,
+          personChats,
           commands,
+          onChat: (contact) => {
+            const chat = contact.peerId && personChats.get(contact.peerId);
+            if (chat) transition.navigate(() => openPersonChat(chat));
+          },
           onEdit: (contact) =>
             transition.navigate(() =>
               router.push({ pathname: '/contact/[id]', params: { id: contact.id } }),
             ),
           onSelect: async (contact) => {
+            if (!commands.canLocateOnMap()) return;
+            map.setTestUserCount(0);
+            if (sharing.model.focusMember(contact.peerId)) {
+              transition.navigate(() => router.navigate('/'));
+              return;
+            }
+            sharing.model.clearFocus();
             await commands.locateContact(contact);
             if (
               active.current &&

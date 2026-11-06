@@ -1,9 +1,13 @@
 import { Avatar } from '../../../shared/ui/Avatar';
+import { UnreadBadge, chatButtonLabel } from '../../../shared/ui/UnreadBadge';
+import type { PersonChat } from '../../chat/models/personChats';
+import { ChatIcon, EditIcon, InboxIcon } from '../../../shared/ui/ChatIcon';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
-import React, { memo } from 'react';
+import React, { memo, useDeferredValue, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, FlatList, StyleSheet, Text, View } from 'react-native';
 import type { Contact } from '../models/contact';
 import type { ContactsState, ContactsViewModel } from '../viewmodels/ContactsViewModel';
+import { TextField } from '../../../shared/ui/TextField';
 import { colors } from '../../../shared/theme/colors';
 export interface ContactsPanelProps {
   state: Readonly<ContactsState>;
@@ -25,34 +29,77 @@ export interface ContactsPanelProps {
     | 'dismissEvent'
   > & { retry: () => void };
   listHeight?: number;
+  personChats: ReadonlyMap<string, PersonChat>;
   fill?: boolean;
   onEdit: (contact: Contact) => void;
+  onChat: (contact: Contact) => void;
+  onShowAll?: () => void;
   onSelect: (contact: Contact) => void;
 }
 export const ContactsPanel = memo(function ContactsPanel({
   state,
   listHeight = 240,
+  personChats,
   fill = false,
   commands,
   onEdit,
+  onChat,
+  onShowAll,
   onSelect,
 }: ContactsPanelProps) {
   const { t } = useTranslation();
 
+  const [search, setSearch] = useState('');
+  const unread =
+    state.requests.filter((i) => !i.acknowledged).length +
+    state.events.filter((i) => !i.acknowledged).length;
+  const term = useDeferredValue(search.trim().toLocaleLowerCase());
+  const filteredContacts = useMemo(
+    () =>
+      term
+        ? state.contacts.filter((contact) => contact.name.toLocaleLowerCase().includes(term))
+        : state.contacts,
+    [state.contacts, term],
+  );
   return (
-    <View style={fill ? { flex: 1, minHeight: 0 } : undefined}>
-      <Pressable
-        accessibilityRole="button"
-        onPress={commands.openInbox}
-        style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-      >
-        <Text style={styles.accent}>
-          {t('Notifications')}
-          {state.requests.length + state.events.length
-            ? '(' + (state.requests.length + state.events.length) + ')'
-            : ''}
-        </Text>
-      </Pressable>
+    <View style={fill ? { flex: 1, minHeight: 0 } : { flexShrink: 1, minHeight: 0 }}>
+      <View style={styles.topRow}>
+        <View style={styles.search}>
+          <TextField
+            accessibilityLabel={t('Search contacts')}
+            placeholder={t('Search contacts')}
+            value={search}
+            onChangeText={setSearch}
+            autoCorrect={false}
+            returnKeyType="search"
+            style={{ paddingRight: 48, marginBottom: 0 }}
+          />
+          {!!search && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('Clear search')}
+              onPress={() => setSearch('')}
+              style={styles.clearSearch}
+            >
+              <Text style={styles.clearGlyph}>×</Text>
+            </Pressable>
+          )}
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={commands.openInbox}
+          accessibilityLabel={t('Inbox')}
+          accessibilityValue={{ text: String(unread) }}
+          style={({ pressed }) => [styles.inbox, pressed && styles.pressed]}
+        >
+          <InboxIcon />
+          {!!unread && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
       {state.loading && (
         <ActivityIndicator color={colors.accent} accessibilityLabel={t('Loading contacts')} />
       )}
@@ -67,73 +114,161 @@ export const ContactsPanel = memo(function ContactsPanel({
       {!state.loading && !state.contacts.length && (
         <Text style={styles.muted}>{t('No contacts yet. Send a request to add someone.')}</Text>
       )}
+      {!!term && !filteredContacts.length && (
+        <Text style={styles.muted}>{t('No matching contacts.')}</Text>
+      )}
       <FlatList
-        style={fill ? { flex: 1 } : { maxHeight: listHeight }}
-        data={state.contacts}
+        style={fill ? { flex: 1 } : { maxHeight: listHeight, minHeight: 0, flexShrink: 1 }}
+        data={filteredContacts}
         keyExtractor={(contact) => contact.id}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         initialNumToRender={8}
-        renderItem={({ item: contact }) => (
-          <View style={styles.row}>
-            <Avatar uri={contact.avatarUrl} name={contact.name} size={38} />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('Show {name} on map', { name: contact.name })}
-              onPress={() => onSelect(contact)}
-              disabled={!!state.actionId}
-              accessibilityState={{
-                disabled: !!state.actionId,
-                busy: state.actionId === 'locate:' + contact.id,
-              }}
-              style={({ pressed }) => [
-                { flex: 1, paddingVertical: 16, opacity: pressed ? 0.65 : 1 },
-              ]}
-            >
-              <Text style={styles.name} numberOfLines={1}>
-                {contact.name}
-              </Text>
-            </Pressable>
-            {state.actionId === 'locate:' + contact.id && (
-              <ActivityIndicator color={colors.accent} size="small" />
-            )}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('Edit {name}', { name: contact.name })}
-              onPress={() => onEdit(contact)}
-              style={({ pressed }) => [styles.edit, pressed && styles.pressed]}
-            >
-              <Text style={styles.accent}>{t('Edit')}</Text>
-            </Pressable>
-          </View>
-        )}
+        renderItem={({ item: contact }) => {
+          const chat = contact.peerId ? personChats.get(contact.peerId) : undefined;
+          const count = chat?.unread ?? 0;
+          const chatLabel = t('Chat with {name}', { name: contact.name });
+          return (
+            <View style={styles.row}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('Show {name} on map', { name: contact.name })}
+                onPress={() => onSelect(contact)}
+                disabled={!!state.actionId}
+                accessibilityState={{
+                  disabled: !!state.actionId,
+                  busy: state.actionId === 'locate:' + contact.id,
+                }}
+                style={({ pressed }) => [styles.person, pressed && styles.pressed]}
+              >
+                <View>
+                  <Avatar uri={contact.avatarUrl} name={contact.name} size={40} />
+                  <UnreadBadge count={count} />
+                </View>
+                <Text style={styles.name} numberOfLines={1}>
+                  {contact.name}
+                </Text>
+                {state.actionId === 'locate:' + contact.id && (
+                  <ActivityIndicator color={colors.accent} size="small" />
+                )}
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('Edit {name}', { name: contact.name })}
+                onPress={() => onEdit(contact)}
+                style={({ pressed }) => [styles.edit, pressed && styles.pressed]}
+              >
+                <EditIcon />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={chatButtonLabel(t, chatLabel, count)}
+                disabled={!chat}
+                accessibilityState={{ disabled: !chat }}
+                onPress={() => onChat(contact)}
+                style={({ pressed }) => [
+                  styles.edit,
+                  !chat && { opacity: 0.45 },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <ChatIcon unread={count} />
+              </Pressable>
+            </View>
+          );
+        }}
       />
-      <Pressable
-        accessibilityRole="button"
-        onPress={commands.openForm}
-        style={({ pressed }) => [styles.add, pressed && styles.pressed]}
-      >
-        <Text style={styles.accent}>{t('+ New contact')}</Text>
-      </Pressable>
+      <View style={onShowAll ? styles.dropdownActions : styles.fullActions}>
+        {onShowAll && (
+          <Pressable accessibilityRole="button" onPress={onShowAll} style={styles.showAll}>
+            <Text style={styles.accent}>{t('Show all')}</Text>
+          </Pressable>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          onPress={commands.openForm}
+          style={({ pressed }) => [
+            styles.add,
+            onShowAll && styles.dropdownAdd,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.accent}>{t('+ New contact')}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 });
 const styles = StyleSheet.create({
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  inbox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.input,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  search: { position: 'relative', flex: 1 },
+  dropdownActions: { flexDirection: 'row', alignItems: 'stretch', gap: 8, marginTop: 8 },
+  fullActions: { marginTop: 12 },
+  dropdownAdd: { flex: 1 },
+  showAll: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  clearSearch: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: 44,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearGlyph: { color: colors.muted, fontSize: 23 },
+  badge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { color: colors.buttonText, fontSize: 10, fontWeight: '700' },
   pressed: { opacity: 0.65, backgroundColor: '#BCB5FF12' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderBottomWidth: 1,
+    gap: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
   avatar: { width: 38, height: 38, borderRadius: 19 },
   initial: { backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
-  name: { color: colors.text, fontSize: 16 },
+  person: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 12,
+  },
+  name: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '500' },
   accent: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   muted: { color: colors.muted, lineHeight: 22 },
   error: { color: '#ffb4be', lineHeight: 22 },
-  action: { minHeight: 44, justifyContent: 'center' },
+  action: {
+    minHeight: 44,
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   edit: {
     borderRadius: 10,
     minWidth: 44,
@@ -145,8 +280,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    marginTop: 16,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },

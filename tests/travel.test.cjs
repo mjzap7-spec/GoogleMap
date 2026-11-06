@@ -55,7 +55,6 @@ test('late GPS subscriptions are removed after backgrounding; resume respects us
   };
   const model = new MapViewModel(undefined, tracker);
   model.start();
-  model.toggleRecording();
   assert.equal(model.getSnapshot().tracking, 'requesting');
   model.setForeground(false);
   callback(fix());
@@ -136,7 +135,6 @@ test('GPS place names resolve without blocking tracking or repeating nearby look
     },
   });
   model.start();
-  model.toggleRecording();
   await flush();
   callback(fix());
   assert.equal(model.getSnapshot().recordedPoints, 1);
@@ -169,7 +167,36 @@ test('late place lookup results cannot update a disposed map', async () => {
   assert.equal(model.getSnapshot().placeName, '');
 });
 
-test('toolbar toggles path recording while GPS stays active and paused movement is not joined', async () => {
+test('a stationary trip asks for a new fix only when the foreground watch has gone quiet', async (t) => {
+  let deliver,
+    requests = 0,
+    clock = now;
+  const model = new MapViewModel(
+    undefined,
+    {
+      watch: async (next) => {
+        deliver = next;
+        return () => {};
+      },
+      refresh: () => requests++,
+    },
+    () => clock,
+  );
+  t.after(model.dispose);
+  model.start();
+  await flush();
+  deliver(fix());
+  model.refreshTripFix();
+  assert.equal(requests, 0);
+  clock += 30000;
+  model.refreshTripFix();
+  assert.equal(requests, 1);
+  model.setForeground(false);
+  model.refreshTripFix();
+  assert.equal(requests, 1);
+});
+
+test('a fresh session records immediately and a manual pause survives foreground and screen changes', async () => {
   let deliver;
   let watchers = 0;
   let stopped = 0;
@@ -183,10 +210,9 @@ test('toolbar toggles path recording while GPS stays active and paused movement 
   model.start();
   await flush();
   deliver(fix());
-  assert.equal(model.getSnapshot().recording, false);
-  assert.equal(model.getSnapshot().recordedPoints, 0);
+  assert.equal(model.getSnapshot().recording, true);
+  assert.equal(model.getSnapshot().recordedPoints, 1);
   assert.equal(model.getSnapshot().live.longitude, fix().longitude);
-  model.toggleRecording();
   deliver(fix(1));
   assert.equal(model.getSnapshot().recordedPoints, 2);
   model.toggleRecording();
@@ -195,16 +221,21 @@ test('toolbar toggles path recording while GPS stays active and paused movement 
   assert.equal(model.getSnapshot().live.longitude, fix(2).longitude);
   assert.equal(model.getSnapshot().tracking, 'tracking');
   assert.equal(stopped, 0);
+  model.setForeground(false);
+  model.setForeground(true);
+  model.start();
+  await flush();
+  assert.equal(model.getSnapshot().recording, false);
   model.toggleRecording();
   deliver(fix(3));
   assert.equal(model.getSnapshot().trail.length, 2);
   assert.equal(model.getSnapshot().trail[1][0].longitude, fix(2).longitude);
-  assert.equal(watchers, 1);
+  assert.equal(watchers, 2);
   model.clearTrail();
   assert.equal(model.getSnapshot().recordedPoints, 0);
   assert.ok(model.getSnapshot().live);
   model.dispose();
-  assert.equal(stopped, 1);
+  assert.equal(stopped, 2);
 });
 test('rapid start then pause during GPS startup does not create duplicate watchers or record late fixes', async () => {
   let deliver, finish;
@@ -219,7 +250,6 @@ test('rapid start then pause during GPS startup does not create duplicate watche
     },
   });
   model.start();
-  model.toggleRecording();
   model.toggleRecording();
   finish(() => {});
   await flush();

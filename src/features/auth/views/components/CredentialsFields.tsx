@@ -1,6 +1,6 @@
 import { useTranslation } from '../../../../shared/i18n/LanguageProvider';
-import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Pressable, Text, View, type TextInput } from 'react-native';
 import { FormField } from '../../../../shared/ui/FormField';
 import { TextField } from '../../../../shared/ui/TextField';
 import { ui } from '../../../../shared/ui/styles';
@@ -9,14 +9,19 @@ import { isFormBusy, type AuthViewProps } from '../types';
 
 interface CredentialsFieldsProps extends Pick<AuthViewProps, 'state' | 'commands'> {
   includeConfirm?: boolean;
+  onForgotPassword?: () => void;
 }
 
 export function CredentialsFields({
   state,
   commands,
   includeConfirm = false,
+  onForgotPassword,
 }: CredentialsFieldsProps) {
   const { t } = useTranslation();
+  const passwordRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const confirmRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const [passwordFocused, setPasswordFocused] = useState(false);
 
   const disabled = isFormBusy(state);
   return (
@@ -31,12 +36,33 @@ export function CredentialsFields({
         keyboardType="email-address"
         autoComplete="email"
         editable={!disabled}
+        returnKeyType="next"
+        submitBehavior="submit"
+        onSubmitEditing={() => passwordRef.current?.focus()}
       />
-      <Text style={ui.label}>{t('Password')}</Text>
-      <View style={authStyles.passwordRow}>
+      <View style={authStyles.passwordHeading}>
+        <Text style={[ui.label, { marginBottom: 0 }]}>{t('Password')}</Text>
+        {onForgotPassword && (
+          <Pressable
+            accessibilityRole="button"
+            disabled={disabled}
+            onPress={onForgotPassword}
+            style={authStyles.forgot}
+          >
+            <Text style={ui.link}>{t('Forgot password?')}</Text>
+          </Pressable>
+        )}
+      </View>
+      <View style={[authStyles.passwordRow, passwordFocused && ui.inputFocused]}>
         <TextField
+          ref={passwordRef}
           accessibilityLabel={t('Password')}
-          style={{ paddingRight: 70 }}
+          style={authStyles.passwordInput}
+          onFocus={() => setPasswordFocused(true)}
+          onBlur={() => setPasswordFocused(false)}
+          returnKeyType={includeConfirm ? 'next' : 'done'}
+          submitBehavior={includeConfirm ? 'submit' : 'blurAndSubmit'}
+          onSubmitEditing={includeConfirm ? () => confirmRef.current?.focus() : commands.submit}
           placeholder={includeConfirm ? t('At least 8 characters') : t('Enter your password')}
           value={state.password}
           onChangeText={commands.setPassword}
@@ -58,6 +84,9 @@ export function CredentialsFields({
       </View>
       {includeConfirm && (
         <FormField
+          ref={confirmRef}
+          returnKeyType="done"
+          onSubmitEditing={commands.submit}
           label={t('Confirm password')}
           placeholder={t('Enter your password again')}
           value={state.confirm}

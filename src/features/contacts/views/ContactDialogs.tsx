@@ -25,6 +25,8 @@ export function ContactDialogs({
 
   const { height } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
+  const requests = state.requests.filter((i) => state.inboxManual || !i.acknowledged);
+  const events = state.events.filter((i) => state.inboxManual || !i.acknowledged);
   return (
     <>
       <Modal
@@ -97,16 +99,16 @@ export function ContactDialogs({
         <View style={styles.backdrop}>
           <View style={styles.card}>
             <Text accessibilityRole="header" style={styles.title}>
-              {t('Contact notifications')}
+              {t('Inbox')}
             </Text>
             <ScrollView
               style={{ maxHeight: Math.max(100, Math.min(360, height - 250)) }}
               keyboardShouldPersistTaps="handled"
             >
-              {!state.requests.length && !state.events.length && (
+              {!requests.length && !events.length && (
                 <Text style={styles.muted}>{t('No pending requests.')}</Text>
               )}
-              {state.events.map((event) => (
+              {events.map((event) => (
                 <View key={event.id} style={styles.request}>
                   <Text accessibilityLiveRegion="polite" style={styles.name}>
                     {t(
@@ -132,7 +134,7 @@ export function ContactDialogs({
                   </Pressable>
                 </View>
               ))}
-              {state.requests.map((request) => (
+              {requests.map((request) => (
                 <View key={request.id} style={styles.request}>
                   <Text style={styles.name}>{request.fromName}</Text>
                   <Text style={styles.muted}>{request.fromEmail}</Text>

@@ -11,7 +11,7 @@ import {
   type ContactEvent,
   type ContactRepository,
 } from '../models/contact';
-import { ObservableViewModel } from '../../../shared/mvvm/ObservableViewModel';
+import { NoticeViewModel } from '../../../shared/feedback/NoticeViewModel';
 export interface ContactsState {
   selectedUser: SharedMapUser | null;
   mapRequestBusy: boolean;
@@ -22,6 +22,7 @@ export interface ContactsState {
   events: ContactEvent[];
   notificationError: string;
   inboxOpen: boolean;
+  inboxManual: boolean;
   email: string;
   notice: string;
   actionId: string;
@@ -39,7 +40,7 @@ export interface ContactsState {
   busy: boolean;
   error: string;
 }
-export class ContactsViewModel extends ObservableViewModel<ContactsState> {
+export class ContactsViewModel extends NoticeViewModel<ContactsState> {
   private eventsStop?: () => void;
   private requestsStop?: () => void;
   private nearbyStop?: () => void;
@@ -55,11 +56,14 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
   private userKey = '';
   private selfUser?: AuthUser;
   private focusRevision = 0;
+  private focusStop?: () => void;
   private generation = 0;
+  private dismissed = new Set<string>();
   private stop?: () => void;
   constructor(
     private repository: ContactRepository,
     private userId: string,
+    private visibleNearby = true,
   ) {
     super({
       selectedUser: null,
@@ -71,6 +75,7 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
       events: [],
       notificationError: '',
       inboxOpen: false,
+      inboxManual: false,
       email: '',
       notice: '',
       actionId: '',
@@ -98,6 +103,7 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
   start = () => {
     if (this.state.busy || this.state.actionId || this.state.mapRequestBusy) return;
     this.stopNearby();
+    this.stopFocus();
     this.stop?.();
     this.requestsStop?.();
     this.eventsStop?.();
@@ -126,15 +132,15 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
         this.requestsStop = this.repository.observeRequests(
           this.userId,
           (requests) => {
-            if (generation === this.generation)
-              this.update({
-                requests,
-                inboxOpen:
-                  this.state.inboxOpen ||
-                  requests.some(
-                    (item) => !this.state.requests.some((previous) => previous.id === item.id),
-                  ),
-              });
+            if (generation !== this.generation) return;
+            requests = this.applyDismissals('r', requests);
+            this.update({
+              requests,
+              inboxOpen:
+                this.state.inboxManual ||
+                requests.some((i) => !i.acknowledged) ||
+                this.state.events.some((i) => !i.acknowledged),
+            });
           },
           (error) => {
             if (generation === this.generation) this.update({ error: contactErrorMessage(error) });
@@ -149,14 +155,17 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
         this.userId,
         (events) => {
           if (generation !== this.generation) return;
+          events = this.applyDismissals('e', events);
           this.update({
             events,
             notificationError: '',
+            requestedUserIds: this.state.requestedUserIds.filter(
+              (id) => !events.some((event) => event.actorId === id && event.kind === 'declined'),
+            ),
             inboxOpen:
-              this.state.inboxOpen ||
-              events.some(
-                (event) => !this.state.events.some((previous) => previous.id === event.id),
-              ),
+              this.state.inboxManual ||
+              events.some((i) => !i.acknowledged) ||
+              this.state.requests.some((i) => !i.acknowledged),
           });
         },
         (error) => {
@@ -185,12 +194,21 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
     }
   };
   selectMapUser = (id: string) => {
-    if (this.state.mapRequestBusy) return;
+    if (!this.state.showNearby || this.state.mapRequestBusy) return;
     const user =
       this.state.nearby.find((item) => item.id === id) ??
       (this.state.focus?.id === id ? this.state.focus : null);
     if (!user || id === this.userId || user.expiresAt <= Date.now()) return;
     this.update({ selectedUser: user, mapRequestError: '', formOpen: false });
+  };
+  selectSharedUser = (user: SharedMapUser) => {
+    if (
+      this.state.showNearby &&
+      !this.state.mapRequestBusy &&
+      user.id !== this.userId &&
+      user.expiresAt > Date.now()
+    )
+      this.update({ selectedUser: user, mapRequestError: '', formOpen: false });
   };
   closeMapUser = () => {
     if (!this.state.mapRequestBusy) this.update({ selectedUser: null, mapRequestError: '' });
@@ -215,7 +233,8 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
     try {
       if (!this.repository.sendRequestToUser)
         throw new ContactFailure('Update the app to send requests.');
-      await this.repository.sendRequestToUser(this.userId, user.id);
+      if (user.groupId) await this.repository.sendRequestToUser(this.userId, user.id, user.groupId);
+      else await this.repository.sendRequestToUser(this.userId, user.id);
       if (generation === this.generation)
         this.update({
           requestedUserIds: [...this.state.requestedUserIds, user.id],
@@ -244,9 +263,31 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
   };
   openInbox = () => {
     if (this.state.notificationError) this.start();
-    this.update({ inboxOpen: true });
+    this.update({ inboxOpen: true, inboxManual: true });
   };
-  closeInbox = () => this.update({ inboxOpen: false });
+  private applyDismissals<T extends ContactRequest | ContactEvent>(kind: string, items: T[]): T[] {
+    return items.map((item) =>
+      this.dismissed.has(kind + ':' + item.id + ':' + item.version)
+        ? { ...item, acknowledged: true }
+        : item,
+    );
+  }
+  closeInbox = () => {
+    const { requests, events } = this.state;
+    requests.forEach((i) => this.dismissed.add('r:' + i.id + ':' + i.version));
+    events.forEach((i) => this.dismissed.add('e:' + i.id + ':' + i.version));
+    this.update({
+      inboxOpen: false,
+      inboxManual: false,
+      requests: requests.map((i) => ({ ...i, acknowledged: true })),
+      events: events.map((i) => ({ ...i, acknowledged: true })),
+    });
+    const generation = this.generation;
+    void this.repository.acknowledge?.(this.userId, requests, events).catch((error) => {
+      if (generation === this.generation)
+        this.update({ notificationError: contactErrorMessage(error) });
+    });
+  };
   setEmail = (email: string) => {
     if (!this.state.busy) this.update({ email, error: '', notice: '' });
   };
@@ -290,13 +331,20 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
       if (generation === this.generation) this.update({ actionId: '', requestAction: '' });
     }
   };
+  canLocateOnMap = () => {
+    if (this.state.showNearby) return true;
+    this.update({ notice: 'Turn on Show Nearby Users on the map to locate someone.' });
+    return false;
+  };
   locateContact = async (contact: Contact) => {
-    if (this.state.actionId) return;
+    if (this.state.actionId || !this.canLocateOnMap()) return;
     if (!contact.peerId) {
       this.update({ error: 'This contact has no shared GPS location.' });
       return;
     }
     const generation = this.generation;
+    this.stopFocus();
+    const revision = this.focusRevision;
     this.update({ actionId: 'locate:' + contact.id, error: '', notice: '' });
     try {
       const cached = this.state.nearby.find(
@@ -304,16 +352,44 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
       );
       const location =
         cached ?? (await this.repository.sharedLocation?.(this.userId, contact.peerId));
-      if (generation !== this.generation) return;
+      if (generation !== this.generation || revision !== this.focusRevision) return;
       if (!location) throw new ContactFailure('This user is not sharing a recent location.');
-      this.update({
-        focus: { ...location, nickname: contact.name, revision: ++this.focusRevision },
+      this.update({ focus: { ...location, nickname: contact.name, revision } });
+      const stop = this.repository.observeSharedLocation?.(this.userId, contact.peerId, (live) => {
+        if (generation !== this.generation || revision !== this.focusRevision) return;
+        if (live && live.expiresAt > Date.now()) {
+          this.update({ focus: { ...live, nickname: contact.name, revision } });
+          return;
+        }
+        this.stopFocus();
+        const selected = this.state.selectedUser;
+        this.update({
+          nearby: this.state.nearby.filter((user) => user.id !== contact.peerId),
+          selectedUser:
+            selected && selected.id === contact.peerId && !selected.groupId ? null : selected,
+        });
       });
+      if (revision === this.focusRevision) this.focusStop = stop;
+      else stop?.();
     } catch (error) {
-      if (generation === this.generation) this.update({ error: contactErrorMessage(error) });
+      if (generation === this.generation && revision === this.focusRevision) {
+        this.stopFocus();
+        this.update({ error: contactErrorMessage(error) });
+      }
     } finally {
       if (generation === this.generation) this.update({ actionId: '' });
     }
+  };
+  private stopFocus() {
+    this.focusRevision++;
+    this.focusStop?.();
+    this.focusStop = undefined;
+    this.update({ focus: null });
+  }
+  setNearbyVisibility = (visible: boolean) => {
+    if (this.visibleNearby === visible) return;
+    this.visibleNearby = visible;
+    this.queuePresence(visible && this.foreground ? this.position : null);
   };
   setPosition = (point: TravelPoint | null, active: boolean) => {
     const wasActive = this.foreground && !!this.position;
@@ -322,9 +398,11 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
     if (active && point) {
       if (!this.heartbeat)
         this.heartbeat = setInterval(() => {
-          if (this.foreground && this.position) this.queuePresence(this.position);
+          if (this.visibleNearby && this.foreground && this.position)
+            this.queuePresence(this.position);
         }, 30000);
-      if (!wasActive || Date.now() - this.lastPublish > 15000) this.queuePresence(point);
+      if (this.visibleNearby && (!wasActive || Date.now() - this.lastPublish > 15000))
+        this.queuePresence(point);
     } else {
       clearInterval(this.heartbeat);
       this.heartbeat = undefined;
@@ -374,12 +452,15 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
             const focusedUser = this.state.focus;
             this.update({
               nearby,
-              selectedUser: this.state.selectedUser
-                ? (nearby.find((user) => user.id === selectedId) ??
-                  (focusedUser && focusedUser.id === selectedId && focusedUser.expiresAt > now
-                    ? focusedUser
-                    : null))
-                : null,
+              selectedUser:
+                this.state.selectedUser?.groupId && this.state.selectedUser.expiresAt > now
+                  ? this.state.selectedUser
+                  : this.state.selectedUser
+                    ? (nearby.find((user) => user.id === selectedId) ??
+                      (focusedUser && focusedUser.id === selectedId && focusedUser.expiresAt > now
+                        ? focusedUser
+                        : null))
+                    : null,
               nearbyError: '',
               ...(this.state.focus && this.state.focus.expiresAt < Date.now()
                 ? { focus: null }
@@ -397,7 +478,8 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
     }
   };
   setShowNearby = (showNearby: boolean) => {
-    this.update({ showNearby, nearbyError: '' });
+    if (!showNearby) this.stopFocus();
+    this.update({ showNearby, nearbyError: '', ...(!showNearby && { selectedUser: null }) });
     this.setPosition(this.position, this.foreground);
   };
   retryNearby = () => {
@@ -405,7 +487,7 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
     this.stopNearby();
     this.update({ nearbyError: '', sharingError: '' });
     this.setPosition(this.position, this.foreground);
-    if (this.position && this.foreground) this.queuePresence(this.position);
+    if (this.visibleNearby && this.position && this.foreground) this.queuePresence(this.position);
   };
   private queuePresence(point: TravelPoint | null) {
     if (point) this.lastPublish = Date.now();
@@ -470,6 +552,7 @@ export class ContactsViewModel extends ObservableViewModel<ContactsState> {
   };
   dispose = () => {
     this.generation++;
+    this.stopFocus();
     this.stop?.();
     this.stop = undefined;
     this.requestsStop?.();

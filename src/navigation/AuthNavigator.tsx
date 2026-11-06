@@ -30,18 +30,20 @@ export function AuthNavigator() {
           animationTypeForReplace: 'push',
         }}
       >
-        <Stack.Protected guard={!state.user}>
+        <Stack.Protected guard={!state.user} redirectTo="/">
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="sign-up" />
           <Stack.Screen name="reset-password" />
         </Stack.Protected>
-        <Stack.Protected guard={!!state.user}>
+        <Stack.Protected guard={!!state.user} redirectTo="/sign-in">
           <Stack.Screen name="index" />
           <Stack.Screen name="profile" />
           <Stack.Screen name="contact/[id]" />
           <Stack.Screen name="contacts" />
-          <Stack.Screen name="help" />
+          <Stack.Screen name="chat" />
+          <Stack.Screen name="chat/[id]" />
         </Stack.Protected>
+        <Stack.Screen name="help" />
       </Stack>
     </AuthenticatedShell>
   );

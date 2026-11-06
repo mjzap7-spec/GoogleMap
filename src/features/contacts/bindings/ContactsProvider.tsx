@@ -1,3 +1,4 @@
+import { useActionNotices } from '../../../shared/ui/Feedback';
 import React, {
   createContext,
   useContext,
@@ -15,15 +16,18 @@ import { useMapViewModel } from '../../map/bindings/MapProvider';
 function useContactsModel(user: AuthUser) {
   const { createContacts } = useAuthDependencies();
   const [model] = useState(() => createContacts(user.id));
+  useActionNotices(model);
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
   const map = useMapViewModel();
   const mapState = useSyncExternalStore(map.subscribe, map.getSnapshot, map.getSnapshot);
+  const profileSyncPending = user.profileSyncPending === true;
   useEffect(() => {
+    if (profileSyncPending) return;
     model.start();
     return model.dispose;
-  }, [model]);
+  }, [model, profileSyncPending]);
   useEffect(() => {
-    void model.registerUser(user);
+    if (!user.profileSyncPending) void model.registerUser(user);
   }, [model, user]);
   useEffect(() => {
     model.setPosition(mapState.live, mapState.tracking === 'tracking');
@@ -32,6 +36,7 @@ function useContactsModel(user: AuthUser) {
     () => ({
       openForm: model.openForm,
       selectMapUser: model.selectMapUser,
+      selectSharedUser: model.selectSharedUser,
       closeMapUser: model.closeMapUser,
       requestSelectedUser: model.requestSelectedUser,
       cancel: () => {
@@ -45,6 +50,7 @@ function useContactsModel(user: AuthUser) {
       },
       respond: model.respond,
       locateContact: model.locateContact,
+      canLocateOnMap: model.canLocateOnMap,
       setShowNearby: model.setShowNearby,
       retryNearby: model.retryNearby,
       openInbox: model.openInbox,

@@ -37,6 +37,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "android:open": "node scripts/open-emulators.cjs",
+    "android:dev": "node scripts/start-emulators.cjs",
+    "android:route": "node scripts/play-route.cjs",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
@@ -46,7 +48,7 @@
     "format": "prettier --write src tests scripts docs README.md CONTRIBUTING.md eslint.config.js",
     "format:check": "prettier --check src tests scripts docs README.md CONTRIBUTING.md eslint.config.js",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-google-map-social \"node --test tests/firestore/social.rules.cjs\""
+    "test:rules": "npm run test:build && firebase emulators:exec --only firestore --project demo-google-map-social \"node --test tests/firestore/social.rules.cjs\""
   },
   "private": true
 }

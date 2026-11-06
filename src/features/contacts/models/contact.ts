@@ -12,12 +12,15 @@ export interface Contact {
   readonly avatarUrl?: string | null;
 }
 export interface ContactRequest {
+  readonly version?: number;
+  readonly acknowledged?: boolean;
   readonly id: string;
   readonly fromId: string;
   readonly fromName: string;
   readonly fromEmail: string;
 }
 export interface SharedMapUser {
+  readonly groupId?: string;
   readonly id: string;
   readonly nickname: string;
   readonly avatarUrl: string | null;
@@ -29,11 +32,19 @@ export interface ContactFocus extends SharedMapUser {
   readonly revision: number;
 }
 export interface ContactEvent {
+  readonly version?: number;
+  readonly acknowledged?: boolean;
   readonly id: string;
   readonly name: string;
+  readonly actorId?: string;
   readonly kind: 'accepted' | 'declined' | 'removed';
 }
 export interface ContactRepository {
+  acknowledge?(
+    uid: string,
+    requests: readonly ContactRequest[],
+    events: readonly ContactEvent[],
+  ): Promise<void>;
   observeEvents?(
     userId: string,
     next: (events: ContactEvent[]) => void,
@@ -54,9 +65,14 @@ export interface ContactRepository {
     error: (error: unknown) => void,
   ): () => void;
   sendRequest?(userId: string, email: string): Promise<void>;
-  sendRequestToUser?(userId: string, peerId: string): Promise<void>;
+  sendRequestToUser?(userId: string, peerId: string, groupId?: string): Promise<void>;
   respond?(userId: string, request: ContactRequest, accept: boolean): Promise<void>;
-  details?(userId: string, contact: Contact): Promise<Contact>;
+  observeDetails?(
+    userId: string,
+    contact: Contact,
+    next: (value: Contact) => void,
+    error: (reason: unknown) => void,
+  ): () => void;
   rename?(userId: string, contact: Contact, nickname: string): Promise<void>;
   remove?(userId: string, contact: Contact): Promise<void>;
   publishPresence?(userId: string, point: TravelPoint | null): Promise<void>;
@@ -67,6 +83,11 @@ export interface ContactRepository {
     error: (error: unknown) => void,
   ): () => void;
   sharedLocation?(userId: string, peerId: string): Promise<SharedMapUser | null>;
+  observeSharedLocation?(
+    userId: string,
+    peerId: string,
+    next: (location: SharedMapUser | null) => void,
+  ): () => void;
 }
 export class ContactFailure extends Error {}
 export function contactErrorMessage(error: unknown) {

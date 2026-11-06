@@ -22,10 +22,11 @@ export function ContactEditorView({
 
   const contact = state.contact;
   return (
-    <ScreenLayout onBack={onBack} backDisabled={!!state.action}>
-      <Text accessibilityRole="header" style={styles.title}>
-        {contact?.name ?? t('Contact')}
-      </Text>
+    <ScreenLayout
+      onBack={onBack}
+      backDisabled={!!state.action}
+      title={contact?.name ?? t('Contact')}
+    >
       {state.loading && <ActivityIndicator color={colors.accent} />}
       {contact && (
         <>
@@ -87,9 +88,8 @@ export function ContactEditorView({
   );
 }
 const styles = StyleSheet.create({
-  title: { fontSize: 28, fontWeight: '700', color: colors.text, marginBottom: 24 },
   label: { color: colors.muted, fontSize: 14, marginBottom: 8 },
-  value: { color: colors.text, fontSize: 16, lineHeight: 24, marginBottom: 24 },
+  value: { color: colors.text, fontSize: 16, lineHeight: 23, marginBottom: 16 },
   remove: { minHeight: 52, alignItems: 'center', justifyContent: 'center' },
   error: { color: '#ffb4be', fontSize: 15, lineHeight: 22 },
 });

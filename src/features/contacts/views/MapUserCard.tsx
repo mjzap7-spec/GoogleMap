@@ -7,7 +7,17 @@ import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { colors } from '../../../shared/theme/colors';
 import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 import type { ContactsPanelProps } from './ContactsPanel';
-export function MapUserCard({ state, commands }: Pick<ContactsPanelProps, 'state' | 'commands'>) {
+import { ChatIcon } from '../../../shared/ui/ChatIcon';
+import { UnreadBadge, chatButtonLabel } from '../../../shared/ui/UnreadBadge';
+export function MapUserCard({
+  state,
+  commands,
+  unread,
+  onChat,
+}: Pick<ContactsPanelProps, 'state' | 'commands'> & {
+  unread: number;
+  onChat?: () => void;
+}) {
   const { t } = useTranslation();
   const reduced = useReducedMotion();
   const insets = useSafeAreaInsets();
@@ -31,15 +41,38 @@ export function MapUserCard({ state, commands }: Pick<ContactsPanelProps, 'state
           onPress={commands.closeMapUser}
         />
         <View style={styles.card} accessibilityViewIsModal>
+          <View accessible={false} style={styles.handle} />
           <View style={styles.heading}>
-            <Avatar uri={user?.avatarUrl} name={contact?.name || user?.nickname || ''} size={56} />
+            <View>
+              <Avatar
+                uri={user?.avatarUrl}
+                name={contact?.name || user?.nickname || ''}
+                size={56}
+              />
+              <UnreadBadge count={unread} />
+            </View>
             <View style={styles.identity}>
-              <Text accessibilityRole="header" style={styles.name}>
+              <Text accessibilityRole="header" style={styles.name} numberOfLines={2}>
                 {contact?.name || user?.nickname}
               </Text>
               {!!contact && <Text style={styles.muted}>{t('In your contacts')}</Text>}
               {!!requested && !contact && <Text style={styles.muted}>{t('Request sent')}</Text>}
             </View>
+            {onChat && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={chatButtonLabel(
+                  t,
+                  t('Chat with {name}', { name: contact?.name || user?.nickname || '' }),
+                  unread,
+                )}
+                onPress={onChat}
+                disabled={state.mapRequestBusy}
+                style={({ pressed }) => [styles.chat, pressed && { opacity: 0.6 }]}
+              >
+                <ChatIcon unread={unread} />
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('Close')}
@@ -76,18 +109,25 @@ export function MapUserCard({ state, commands }: Pick<ContactsPanelProps, 'state
   );
 }
 const styles = StyleSheet.create({
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    backgroundColor: colors.border,
+  },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
     paddingHorizontal: 20,
-    backgroundColor: '#0006',
+    backgroundColor: '#0004',
   },
   card: {
     width: '100%',
     maxWidth: 420,
     alignSelf: 'center',
     padding: 20,
-    borderRadius: 24,
+    borderRadius: 30,
     backgroundColor: colors.input,
     borderWidth: 1,
     borderColor: colors.border,
@@ -101,6 +141,16 @@ const styles = StyleSheet.create({
   name: { fontSize: 20, fontWeight: '600', color: colors.text },
   muted: { color: colors.muted, fontSize: 13, lineHeight: 20 },
   close: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  chat: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#BCB5FF14',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   closeText: { color: colors.muted, fontSize: 28 },
   error: { color: '#ffb4be', fontSize: 14, lineHeight: 21 },
 });

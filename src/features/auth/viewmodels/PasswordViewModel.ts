@@ -1,4 +1,4 @@
-import { ObservableViewModel } from '../../../shared/mvvm/ObservableViewModel';
+import { NoticeViewModel } from '../../../shared/feedback/NoticeViewModel';
 import type { AuthRepository } from '../models/auth';
 import { authErrorMessage } from '../models/AuthFailure';
 
@@ -10,7 +10,7 @@ export interface PasswordState {
   error: string;
   notice: string;
 }
-export class PasswordViewModel extends ObservableViewModel<PasswordState> {
+export class PasswordViewModel extends NoticeViewModel<PasswordState> {
   private generation = 0;
   constructor(
     private repository: AuthRepository,

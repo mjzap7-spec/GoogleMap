@@ -1,4 +1,4 @@
-import { ObservableViewModel } from '../../../shared/mvvm/ObservableViewModel';
+import { NoticeViewModel } from '../../../shared/feedback/NoticeViewModel';
 import type { AuthRepository, AuthUser, AvatarPicker, UserProfile } from '../models/auth';
 import type { City, CityRepository } from '../models/city';
 import { validateProfile } from '../models/validation';
@@ -20,7 +20,7 @@ export interface ProfileState extends UserProfile {
   saveComplete: boolean;
 }
 
-export class ProfileViewModel extends ObservableViewModel<ProfileState> {
+export class ProfileViewModel extends NoticeViewModel<ProfileState> {
   private generation = 0;
   private searchVersion = 0;
   private timer?: ReturnType<typeof setTimeout>;

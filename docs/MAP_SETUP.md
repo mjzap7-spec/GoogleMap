@@ -22,9 +22,9 @@ The blue GPS marker shows your device location, and the blue line shows your tra
 
 ## Travelled path tracking
 
-Location tracking starts automatically when the signed-in Map screen opens, after you grant the device location permission. Pause/Resume and Clear path are in the map controls. The map centers on the first GPS fix and follows movement. Manually panning pauses following; recenter restores it. There is no profile-city fallback. Clear path removes history while keeping the latest GPS marker.
+With a completed profile and location permission, a new signed-in session starts recording automatically. The center toolbar button pauses or resumes the path. Clear path removes the recorded line and keeps the current GPS marker. The map centers on the first GPS fix and follows movement until a manual pan. Recenter restores following.
 
-This version records only while the Map screen is open and the app is in the foreground. Leaving the foreground stops the watcher; returning starts a new segment. A manual pause stays paused until you tap Resume. Leaving the Map screen ends that in-memory map session. Paths are not uploaded to Firebase and are not saved across sessions. Map tiles still load over the internet.
+Recording continues across signed-in screens while the app is in the foreground. Backgrounding stops the GPS watcher. On return, an active recording starts a new segment and a manual pause remains in effect. The path stays in memory for the session. Explicitly starting trip sharing shares the route from that moment with the selected group.
 
 The tracker requests updates after roughly 5 meters of movement (and a 3-second minimum interval on Android). It rejects readings older than 20 seconds, accuracy worse than 50 meters, invalid coordinates, repeated timestamps, and movements below 5 meters. Gaps over 30 seconds and implausible jumps start separate line segments. Up to 5,000 accepted points are kept per session; recording pauses at that limit until you clear and resume.
 

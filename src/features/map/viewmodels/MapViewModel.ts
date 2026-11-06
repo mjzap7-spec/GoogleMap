@@ -1,3 +1,4 @@
+import { createTestUsers, isTestUserCount } from '../models/testUsers';
 import { TravelRecorder, isUsableTravelPoint, type LocationTracker } from '../models/travel';
 import { ObservableViewModel } from '../../../shared/mvvm/ObservableViewModel';
 import { isMapLanguage, type MapLanguage, type MapPreferences, type MapState } from '../models/map';
@@ -18,11 +19,16 @@ export class MapViewModel extends ObservableViewModel<MapState> {
     private preferences?: MapPreferences,
     private tracker?: LocationTracker,
     private now: () => number = Date.now,
+    private allowDeveloperTesting = false,
   ) {
     super({
+      developerTestingEnabled: allowDeveloperTesting,
+      testUserCount: 0,
+      testUsers: [],
+      selectedTestUserId: '',
       language: 'en',
       tracking: 'idle',
-      recording: false,
+      recording: true,
       trackingError: '',
       placeName: '',
       live: null,
@@ -44,6 +50,18 @@ export class MapViewModel extends ObservableViewModel<MapState> {
           this.update({ language });
       })
       .catch(() => {});
+  };
+  setTestUserCount = (count: number) => {
+    if (!this.allowDeveloperTesting || !isTestUserCount(count)) return;
+    this.update({
+      testUserCount: count,
+      selectedTestUserId: '',
+      testUsers: this.state.live ? createTestUsers(this.state.live, count, this.now()) : [],
+    });
+  };
+  selectTestUser = (id: string) => {
+    if (this.allowDeveloperTesting && (!id || this.state.testUsers.some((user) => user.id === id)))
+      this.update({ selectedTestUserId: id });
   };
   setLanguage = (language: MapLanguage) => {
     if (!isMapLanguage(language)) return;
@@ -68,6 +86,15 @@ export class MapViewModel extends ObservableViewModel<MapState> {
     this.trackingWanted = false;
     this.stopWatcher();
     this.update({ tracking: 'paused', trackingError: '' });
+  };
+  refreshTripFix = () => {
+    if (
+      this.foreground &&
+      this.state.tracking === 'tracking' &&
+      (!this.state.live || this.now() - this.state.live.timestamp >= 25000)
+    ) {
+      this.tracker?.refresh?.();
+    }
   };
   resumeTracking = () => {
     this.trackingWanted = true;
@@ -107,6 +134,9 @@ export class MapViewModel extends ObservableViewModel<MapState> {
           const recorded = this.state.recording && this.recorder.add(point);
           this.update({
             live: { ...point },
+            ...(this.state.testUserCount && !this.state.testUsers.length
+              ? { testUsers: createTestUsers(point, this.state.testUserCount, this.now()) }
+              : {}),
             ...(recorded
               ? { trail: this.recorder.segments, recordedPoints: this.recorder.count }
               : {}),
@@ -180,7 +210,7 @@ export class MapViewModel extends ObservableViewModel<MapState> {
     this.stopLanguage?.();
     this.stopLanguage = undefined;
     this.stopWatcher();
-    this.update({ tracking: 'paused' });
+    this.update({ tracking: 'paused', testUserCount: 0, testUsers: [], selectedTestUserId: '' });
     this.generation++;
   };
 }

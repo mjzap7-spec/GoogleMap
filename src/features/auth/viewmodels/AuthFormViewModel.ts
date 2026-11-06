@@ -1,4 +1,4 @@
-import { ObservableViewModel } from '../../../shared/mvvm/ObservableViewModel';
+import { NoticeViewModel } from '../../../shared/feedback/NoticeViewModel';
 import type { AuthForm, AuthMode, AuthRepository } from '../models/auth';
 import { AuthFailure, authErrorMessage } from '../models/AuthFailure';
 import { validateAuthForm } from '../models/validation';
@@ -11,7 +11,7 @@ export interface AuthFormState extends AuthForm {
   readonly resetRequested: boolean;
   readonly googleBusy: boolean;
 }
-export class AuthFormViewModel extends ObservableViewModel<AuthFormState> {
+export class AuthFormViewModel extends NoticeViewModel<AuthFormState> {
   private generation = 0;
   constructor(
     readonly mode: AuthMode,

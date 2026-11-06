@@ -63,18 +63,18 @@ export function MapLanguageSettings({
 }
 const styles = StyleSheet.create({
   section: {
-    marginBottom: 20,
+    marginBottom: 12,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 20,
     backgroundColor: '#14161D',
   },
-  title: { color: colors.text, fontSize: 18, fontWeight: '600', marginBottom: 18 },
+  title: { color: colors.text, fontSize: 18, fontWeight: '600', marginBottom: 12 },
   selected: { backgroundColor: '#BCB5FF12' },
   label: { color: colors.text, fontSize: 14, marginBottom: 10 },
   field: {
-    minHeight: 54,
+    minHeight: 48,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',

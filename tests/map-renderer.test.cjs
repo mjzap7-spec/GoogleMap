@@ -7,7 +7,12 @@ const {
   isMapDocument,
   mapStyleUrl,
 } = require('../.test-build/features/map/models/mapSource');
-function fixture({ autoLoad = true, fetchStyle } = {}) {
+function fixture({
+  autoLoad = true,
+  fetchStyle,
+  projectPeople = false,
+  animateMarkers = false,
+} = {}) {
   const events = {};
   const handlers = {};
   const moves = [];
@@ -18,22 +23,43 @@ function fixture({ autoLoad = true, fetchStyle } = {}) {
   const sources = {};
   const layers = [];
   const pathUpdates = [];
+  const sharedPathUpdates = [];
   const images = new Map();
   const appliedStyles = [];
+  const timers = new Set();
+  const frames = new Set();
+  let frameTime = 0;
+  let zoom = 12;
+  let projections = 0;
   const map = {
+    ...(projectPeople
+      ? {
+          project: ([x, y]) => {
+            projections++;
+            return { x: x * Math.pow(2, zoom), y: y * Math.pow(2, zoom) };
+          },
+        }
+      : {}),
     hasImage: (id) => images.has(id),
     addImage: (id, image, options) => images.set(id, { image, options }),
     setStyle: (style) => appliedStyles.push(style),
     getSource: (id) => sources[id],
     addSource: (id, source) => {
-      sources[id] = { ...source, setData: (data) => pathUpdates.push(data) };
+      sources[id] = {
+        ...source,
+        setData: (data) => {
+          if (id === 'travelled-path') pathUpdates.push(data);
+          if (id === 'shared-trip') sharedPathUpdates.push(data);
+        },
+      };
     },
     addLayer: (layer) => layers.push(layer),
     on: (name, fn) => {
       handlers[name] = fn;
     },
-    getZoom: () => 12,
+    getZoom: () => zoom,
     easeTo: (camera) => moves.push(camera),
+    fitBounds: (bounds, options) => moves.push({ bounds, ...options }),
     getStyle: () => ({
       layers: [
         { id: 'city', type: 'symbol', layout: { 'text-field': ['get', 'name'] } },
@@ -78,6 +104,23 @@ function fixture({ autoLoad = true, fetchStyle } = {}) {
   };
   const context = {
     window,
+    ...(animateMarkers
+      ? {
+          performance: { now: () => frameTime },
+          requestAnimationFrame(callback) {
+            frames.add(callback);
+            return callback;
+          },
+          cancelAnimationFrame(callback) {
+            frames.delete(callback);
+          },
+        }
+      : {}),
+    setTimeout(callback) {
+      timers.add(callback);
+      return callback;
+    },
+    clearTimeout: (callback) => timers.delete(callback),
     fetch: fetchStyle,
     document: {
       addEventListener() {},
@@ -113,10 +156,24 @@ function fixture({ autoLoad = true, fetchStyle } = {}) {
   let id = 0;
   return {
     load,
+    projections: () => projections,
+    advanceFrame(ms) {
+      frameTime += ms;
+      const callbacks = [...frames];
+      frames.clear();
+      callbacks.forEach((fn) => fn(frameTime));
+    },
+    timers,
+    reconnect: () => events.online(),
+    setZoom: (value) => {
+      zoom = value;
+      handlers.zoomend();
+    },
     appliedStyles,
     images,
     gesture: () => handlers.movestart({ originalEvent: {} }),
     pathUpdates,
+    sharedPathUpdates,
     markers,
     layers,
     moves,
@@ -181,6 +238,72 @@ test('GPS centers before initial tiles load and unchanged language avoids layout
   f.send({ type: 'state', live: point, language: 'es', reducedMotion: true });
   assert.equal(f.labels.length, 1, 'motion preference changes do not relayout labels');
   assert.equal(f.messages.at(-1).type, 'ready');
+});
+
+test('zoom works before tiles load and a GPS fix preserves the requested zoom', () => {
+  const f = fixture({ autoLoad: false, projectPeople: true });
+  const state = { type: 'state', language: 'en', reducedMotion: false };
+  const live = { latitude: 28, longitude: -81, timestamp: 10 };
+  const person = {
+    ...live,
+    id: 'a',
+    nickname: 'A',
+    avatarUrl: null,
+    expiresAt: Date.now() + 60000,
+  };
+  f.send({ ...state, live, users: [person] });
+  f.send({ type: 'command', command: 'zoom-in' });
+  f.send({ type: 'command', command: 'zoom-in' });
+  assert.equal(f.moves.at(-1).zoom, 14);
+  const projections = f.projections();
+  f.send({ ...state, live: { ...live, latitude: 28.001, timestamp: 20 } });
+  assert.deepEqual([...f.moves.at(-1).center], [-81, 28.001]);
+  assert.equal(f.moves.at(-1).zoom, 14);
+  assert.equal(f.projections(), projections, 'a GPS packet does not reproject an unchanged crowd');
+  f.setZoom(14);
+  assert.ok(f.projections() > projections, 'camera movement updates the clusters');
+});
+
+test('a followed trip animates between confirmed positions, keeps the zoom, and releases the camera after a pan', () => {
+  const f = fixture({ animateMarkers: true });
+  const person = {
+    id: 'bob',
+    nickname: 'Bob',
+    avatarUrl: null,
+    latitude: 28,
+    longitude: -81,
+    trip: true,
+    expiresAt: Date.now() + 60000,
+  };
+  const show = (latitude, revision = 1, reducedMotion = false) => {
+    const user = { ...person, latitude };
+    f.send({
+      type: 'state',
+      users: [user],
+      focus: { ...user, revision },
+      language: 'en',
+      reducedMotion,
+    });
+  };
+  show(28);
+  assert.equal(f.moves.at(-1).zoom, 16);
+  show(28.001);
+  assert.equal(f.moves.at(-1).zoom, undefined);
+  assert.deepEqual([...f.moves.at(-1).center], [-81, 28.001]);
+  f.advanceFrame(225);
+  assert.ok(Math.abs(f.markers[0].position[1] - 28.0005) < 0.000001);
+  f.advanceFrame(225);
+  assert.equal(f.markers[0].position[1], 28.001);
+  const count = f.moves.length;
+  show(28.001);
+  f.gesture();
+  show(28.002);
+  assert.equal(f.moves.length, count);
+  show(28.002, 2, true);
+  assert.equal(f.moves.at(-1).duration, 0);
+  assert.equal(f.markers[0].position[1], 28.002);
+  f.advanceFrame(450);
+  assert.equal(f.markers[0].position[1], 28.002);
 });
 
 test('GPS path uses separate segments, updates existing source, and recenter prefers GPS over profile', () => {
@@ -352,7 +475,8 @@ test('map avatar click and keyboard activation emit only the selected identity, 
     expiresAt: Date.now() + 60000,
   };
   f.send({ type: 'state', language: 'en', live: next, trail: [[point, next]], users: [user] });
-  const root = f.markers.find((marker) => marker.options.element).options.element;
+  const marker = f.markers.find((marker) => marker.options.element);
+  const root = marker.options.element;
   root.onclick({ stopPropagation() {} });
   assert.equal(f.messages.at(-1).type, 'select-user');
   assert.equal(f.messages.at(-1).userId, 'friend');
@@ -360,12 +484,210 @@ test('map avatar click and keyboard activation emit only the selected identity, 
   root.onkeydown({ key: 'Enter', preventDefault() {} });
   assert.equal(f.messages.at(-1).userId, 'friend');
   const updates = f.pathUpdates.length;
-  f.send({ type: 'state', language: 'en', live: { ...next, timestamp: 3000 }, users: [user] });
+  f.send({ type: 'state', language: 'en', live: { ...next, timestamp: 3000 } });
+  assert.ok(!marker.removed, 'GPS-only updates keep existing people on the map');
   assert.equal(
     f.pathUpdates.length,
     updates,
     'an unchanged trail is neither transferred nor redrawn for GPS-only movement',
   );
-  f.send({ type: 'state', language: 'en', live: next, trail: [], users: [user] });
+  f.send({ type: 'state', language: 'en', live: next, trail: [], users: [] });
+  assert.ok(marker.removed, 'an explicitly empty snapshot removes the marker');
   assert.equal(f.pathUpdates.at(-1).geometry.coordinates.length, 0);
+});
+
+test('crowded markers cluster, expose individual identities, and adapt size to zoom', () => {
+  const f = fixture({ projectPeople: true });
+  const users = ['Alice', 'Bob'].map((nickname, index) => ({
+    id: nickname,
+    nickname,
+    avatarUrl: null,
+    latitude: 28.5,
+    longitude: -81.3 + index * 0.001,
+    expiresAt: Date.now() + 60000,
+  }));
+  f.send({ type: 'state', language: 'en', users });
+  const cluster = f.markers.find((marker) => marker.options.element);
+  assert.equal(cluster.options.element.children[0].children[0].textContent, '2');
+  cluster.options.element.onclick({ stopPropagation() {} });
+  assert.deepEqual(f.messages.at(-1).userIds, ['Alice', 'Bob']);
+  assert.equal(f.messages.at(-1).type, 'select-users');
+  f.setZoom(18);
+  assert.equal(cluster.removed, true);
+  const active = f.markers.filter((marker) => marker.options.element && !marker.removed);
+  assert.equal(active.length, 2);
+  assert.equal(active[0].options.element.children[0].style.width, '44px');
+  f.setZoom(10);
+  const compact = f.markers.filter((marker) => marker.options.element && !marker.removed).at(-1);
+  assert.equal(compact.options.element.children[0].style.width, '40px');
+});
+
+test('unchanged shared trips survive position-only updates without repainting and clear explicitly', () => {
+  const f = fixture();
+  const a = { latitude: 28.5, longitude: -81.3, timestamp: 1000 };
+  const b = { ...a, longitude: -81.31, timestamp: 2000 };
+  f.send({ type: 'state', language: 'en', sharedTrail: [[a, b]] });
+  assert.equal(f.sharedPathUpdates.length, 1);
+  f.send({ type: 'state', language: 'en', live: a });
+  assert.equal(f.sharedPathUpdates.length, 1);
+  f.send({ type: 'state', language: 'en', sharedTrail: [[a, b]] });
+  assert.equal(f.sharedPathUpdates.length, 1);
+  f.send({ type: 'state', language: 'en', sharedTrail: [] });
+  assert.equal(f.sharedPathUpdates.length, 2);
+  assert.equal(f.sharedPathUpdates.at(-1).geometry.coordinates.length, 0);
+});
+
+test('individual users become small points at low zoom and progressively reveal avatars and labels', () => {
+  const f = fixture({ projectPeople: true });
+  const user = {
+    id: 'alice',
+    nickname: 'Alice',
+    avatarUrl: 'https://example.com/alice.png',
+    latitude: 28.5,
+    longitude: -81.3,
+    expiresAt: Date.now() + 60000,
+  };
+  f.send({ type: 'state', language: 'en', users: [user], reducedMotion: false });
+  const root = f.markers.find((marker) => marker.options.element).options.element;
+  const avatar = root.children[0];
+  assert.equal(avatar.style.width, '10px');
+  assert.equal(avatar.children[0].style.opacity, '0');
+  assert.equal(root.children[1].style.opacity, '0');
+  f.setZoom(14);
+  assert.equal(avatar.style.width, '19px');
+  assert.equal(avatar.children[0].style.opacity, '0');
+  f.setZoom(17);
+  assert.equal(avatar.style.width, '44px');
+  assert.equal(root.children[1].style.opacity, '1');
+  assert.match(avatar.style.transition, /140ms/);
+  f.send({ type: 'state', language: 'en', users: [user], reducedMotion: true });
+  assert.equal(avatar.style.transition, 'none');
+  root.onclick({ stopPropagation() {} });
+  assert.equal(f.messages.at(-1).userId, 'alice');
+});
+
+test('a failed Cloudinary marker uses its alternate HTTPS address and keeps the loaded photo on map updates', () => {
+  const f = fixture();
+  const user = {
+    id: 'friend',
+    nickname: 'Jo',
+    avatarUrl: 'https://res.cloudinary.com/demo/image/upload/v9/profile.jpg',
+    latitude: 28,
+    longitude: -81,
+    expiresAt: Date.now() + 60000,
+  };
+  const send = (users) => f.send({ type: 'state', language: 'en', users });
+  send([user]);
+  const avatar = f.markers[0].options.element.children[0];
+  assert.equal(avatar.children.length, 1, 'no image request for a low-zoom point');
+  f.setZoom(16);
+  const image = avatar.children[1];
+  assert.equal(image.src, user.avatarUrl);
+  assert.equal(image.style.visibility, 'hidden');
+  image.onerror();
+  assert.equal(image.src, 'https://res-1.cloudinary.com/demo/image/upload/v9/profile.jpg');
+  image.onload();
+  send([{ ...user, longitude: -80.9 }]);
+  assert.equal(image.style.visibility, 'visible');
+  assert.equal(avatar.children.length, 2);
+  assert.equal(f.timers.size, 0);
+  f.setZoom(10);
+  send([{ ...user, avatarUrl: null }]);
+  assert.equal(image.removed, true);
+  assert.equal(avatar.children[0].textContent, 'J');
+});
+
+test('failed photos retry once and on reconnect, and a removed marker cancels pending work', () => {
+  const f = fixture();
+  f.setZoom(16);
+  const user = {
+    id: 'friend',
+    nickname: 'Jo',
+    avatarUrl: 'https://example.org/photo.jpg',
+    latitude: 28,
+    longitude: -81,
+    expiresAt: Date.now() + 60000,
+  };
+  const send = (users) => f.send({ type: 'state', language: 'en', users });
+  send([user]);
+  const avatar = f.markers[0].options.element.children[0];
+  const image = avatar.children[1];
+  image.onerror();
+  assert.equal(image.src, user.avatarUrl, 'other providers use their own URL');
+  const [retry] = f.timers;
+  f.timers.delete(retry);
+  retry();
+  const previousHandler = image.onerror;
+  image.onerror();
+  send([user]);
+  assert.equal(f.timers.size, 0);
+  assert.equal(image.onerror, previousHandler, 'GPS updates do not restart failed downloads');
+  f.reconnect();
+  assert.notEqual(image.onerror, previousHandler);
+  send([{ ...user, avatarUrl: 'https://example.org/new.jpg' }]);
+  const replacement = avatar.children[2];
+  previousHandler();
+  assert.equal(image.removed, true);
+  replacement.onerror();
+  assert.equal(f.timers.size, 1);
+  send([]);
+  assert.equal(f.timers.size, 0);
+  assert.equal(replacement.onerror, null);
+});
+
+test('500 colocated users render one count badge and preserve all selectable identities', () => {
+  const f = fixture({ projectPeople: true });
+  const users = Array.from({ length: 500 }, (_, index) => ({
+    id: 'user-' + index,
+    nickname: 'User ' + index,
+    avatarUrl: null,
+    latitude: 28.5,
+    longitude: -81.3,
+    expiresAt: Date.now() + 60000,
+  }));
+  f.send({ type: 'state', language: 'en', users });
+  const markers = f.markers.filter((marker) => marker.options.element && !marker.removed);
+  assert.equal(markers.length, 1);
+  const root = markers[0].options.element;
+  assert.equal(root.children[0].children[0].textContent, '500');
+  root.onclick({ stopPropagation() {} });
+  assert.equal(f.messages.at(-1).userIds.length, 500);
+});
+
+test('close zoom limits name labels even when many individuals fit on screen', () => {
+  const f = fixture({ projectPeople: true });
+  f.setZoom(18);
+  const users = Array.from({ length: 20 }, (_, index) => ({
+    id: String(index),
+    nickname: 'Person with a long nickname ' + index,
+    avatarUrl: null,
+    latitude: 28.5,
+    longitude: -81.3 + index * 0.01,
+    expiresAt: Date.now() + 60000,
+  }));
+  f.send({ type: 'state', language: 'en', users });
+  const roots = f.markers
+    .filter((marker) => marker.options.element && !marker.removed)
+    .map((marker) => marker.options.element);
+  assert.equal(roots.length, 20);
+  assert.equal(roots.filter((root) => root.children[1].style.opacity === '1').length, 8);
+});
+
+test('test-mode camera fits the demo crowd once and stop restores GPS following', () => {
+  const f = fixture();
+  const live = { latitude: 28.5, longitude: -81.3, timestamp: 1000 };
+  const user = {
+    id: 'demo-map-user-001',
+    nickname: 'Alex 001',
+    avatarUrl: null,
+    latitude: 28.501,
+    longitude: -81.301,
+    expiresAt: Date.now() + 60000,
+  };
+  f.send({ type: 'state', language: 'en', testUserCount: 10, live, users: [user] });
+  assert.equal(f.moves.filter((move) => move.bounds).length, 1);
+  f.send({ type: 'state', language: 'en', testUserCount: 10, live, users: [user] });
+  assert.equal(f.moves.filter((move) => move.bounds).length, 1);
+  f.send({ type: 'state', language: 'en', testUserCount: 0, live, users: [] });
+  assert.deepEqual(Array.from(f.moves.at(-1).center), [live.longitude, live.latitude]);
 });

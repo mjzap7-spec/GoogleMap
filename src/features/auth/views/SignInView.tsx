@@ -1,11 +1,8 @@
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import React from 'react';
-import { Pressable, Text } from 'react-native';
-import { ui } from '../../../shared/ui/styles';
 import { AuthFormLayout } from './components/AuthFormLayout';
 import { AuthFooter } from './components/AuthFooter';
 import { CredentialsFields } from './components/CredentialsFields';
-import { authStyles } from './styles';
 import { isFormBusy, type AuthViewProps } from './types';
 
 export function SignInView(props: AuthViewProps) {
@@ -27,15 +24,11 @@ export function SignInView(props: AuthViewProps) {
         />
       }
     >
-      <CredentialsFields state={props.state} commands={props.commands} />
-      <Pressable
-        accessibilityRole="button"
-        disabled={disabled}
-        style={authStyles.forgot}
-        onPress={() => props.onNavigate('reset')}
-      >
-        <Text style={ui.link}>{t('Forgot password?')}</Text>
-      </Pressable>
+      <CredentialsFields
+        state={props.state}
+        commands={props.commands}
+        onForgotPassword={() => props.onNavigate('reset')}
+      />
     </AuthFormLayout>
   );
 }

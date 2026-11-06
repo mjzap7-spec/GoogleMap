@@ -1,3 +1,4 @@
+import { useActionNotices } from '../../../shared/ui/Feedback';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { AuthUser } from '../models/auth';
 import { useAuthDependencies } from './AuthProvider';
@@ -6,6 +7,7 @@ import { useAuthDependencies } from './AuthProvider';
 export function useProfile(user: AuthUser) {
   const { createProfile } = useAuthDependencies();
   const [viewModel] = useState(() => createProfile(user));
+  useActionNotices(viewModel);
   const state = useSyncExternalStore(
     viewModel.subscribe,
     viewModel.getSnapshot,

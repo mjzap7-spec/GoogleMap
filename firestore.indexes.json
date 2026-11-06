@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdAt", "order": "ASCENDING" },
+        { "fieldPath": "fromId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "contactRequests",
       "queryScope": "COLLECTION",
       "fields": [

@@ -78,7 +78,7 @@ export function PasswordEditor({
               autoCorrect={false}
               editable={!disabled && !state.busy}
             />
-            <Feedback error={state.error} notice={state.notice} />
+            <Feedback source="password" error={state.error} />
             <PrimaryButton
               label={t('Update password')}
               onPress={save}
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 20,
     backgroundColor: '#14161D',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   toggle: {
     minHeight: 48,
