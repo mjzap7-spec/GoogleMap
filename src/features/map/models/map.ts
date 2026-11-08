@@ -40,6 +40,7 @@ export interface MapUserMarker {
   readonly latitude: number;
   readonly longitude: number;
   readonly expiresAt: number;
+  readonly updatedAt?: number;
 }
 export interface MapCanvasProps {
   sharedTrail?: readonly (readonly TravelPoint[])[];

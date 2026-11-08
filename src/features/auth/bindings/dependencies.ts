@@ -5,6 +5,7 @@ import { UnreadChatsViewModel } from '../../chat/viewmodels/UnreadChatsViewModel
 import { GroupRosterViewModel } from '../../chat/viewmodels/GroupRosterViewModel';
 import { GroupChatActivityViewModel } from '../../chat/viewmodels/GroupChatActivityViewModel';
 import type { ChatPeer, ChatRepository } from '../../chat/models/chat';
+import type { LocalChatHistory } from '../../chat/models/localChatHistory';
 import { LanguageViewModel } from '../../../shared/i18n/LanguageViewModel';
 import { ContactEditorViewModel } from '../../contacts/viewmodels/ContactEditorViewModel';
 import type { LocationTracker } from '../../map/models/travel';
@@ -26,6 +27,7 @@ export interface AuthServices {
   contacts: ContactRepository;
   sharing?: SharingRepository;
   chat?: ChatRepository;
+  chatHistory?: LocalChatHistory;
   developerTesting?: boolean;
   mapPreferences?: MapPreferences;
   locationTracker?: LocationTracker;
@@ -33,15 +35,17 @@ export interface AuthServices {
 
 /** Pure composition contract: adapters are selected by bootstrap, never by a View or hook. */
 export function createAuthDependencies(services: AuthServices) {
+  const chat = services.chat;
   const language = new LanguageViewModel(services.mapPreferences);
   const session = new SessionViewModel(services.repository);
   return {
     createSharing: (user: AuthUser) => new SharingViewModel(services.sharing, user),
     createGroupRoster: (uid: string, groupId: string) =>
-      new GroupRosterViewModel(services.chat, uid, groupId),
-    createChat: (uid: string, peer?: ChatPeer) => new ChatViewModel(services.chat, uid, peer),
-    createUnreadChats: (uid: string) => new UnreadChatsViewModel(services.chat, uid),
-    createGroupChatActivity: (uid: string) => new GroupChatActivityViewModel(services.chat, uid),
+      new GroupRosterViewModel(chat, uid, groupId),
+    createChat: (uid: string, peer?: ChatPeer) =>
+      new ChatViewModel(chat, uid, peer, services.chatHistory),
+    createUnreadChats: (uid: string) => new UnreadChatsViewModel(chat, uid),
+    createGroupChatActivity: (uid: string) => new GroupChatActivityViewModel(chat, uid),
     session,
     language,
     createMapSettings: () => new MapViewModel(language),

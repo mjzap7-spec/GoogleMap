@@ -98,6 +98,7 @@ export interface GroupLocation {
   latitude: number;
   longitude: number;
   expiresAt: number;
+  updatedAt?: number;
   trip: boolean;
   trail: readonly (readonly TravelPoint[])[];
 }
@@ -107,7 +108,7 @@ export interface SharingRepository {
     next: (value: SharingPreferences) => void,
     error: (error: unknown) => void,
   ): () => void;
-  savePreferences(userId: string, value: SharingPreferences): Promise<void>;
+  savePreferences(userId: string, value: SharingPreferences, stopTrips?: boolean): Promise<void>;
   observeGroups(
     userId: string,
     next: (groups: PrivateGroup[]) => void,

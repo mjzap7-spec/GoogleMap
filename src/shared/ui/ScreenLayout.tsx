@@ -26,7 +26,7 @@ export function ScreenLayout({
       <ScreenHeader onBack={onBack} disabled={backDisabled} title={title}>
         {header}
       </ScreenHeader>
-      <KeyboardAvoidingView style={{ flex: 1 }} enabled={Platform.OS === 'ios'} behavior="padding">
+      <KeyboardAvoidingView style={{ flex: 1 }} enabled={Platform.OS !== 'web'} behavior="padding">
         <ScrollView
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

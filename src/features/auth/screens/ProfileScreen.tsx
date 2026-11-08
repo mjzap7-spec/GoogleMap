@@ -64,6 +64,7 @@ function ProfileEditor({ user, sessionError }: { user: AuthUser; sessionError: s
         signOutSection={
           editing ? (
             <PrimaryButton
+              variant="secondary"
               label={t('Sign out')}
               onPress={logout}
               busy={session.busy}
@@ -74,7 +75,6 @@ function ProfileEditor({ user, sessionError }: { user: AuthUser; sessionError: s
         settingsSection={
           editing ? (
             <>
-              <DeveloperTesting />
               <SharingSettings />
               <MapLanguageSettings
                 language={mapSettings.language}
@@ -83,6 +83,7 @@ function ProfileEditor({ user, sessionError }: { user: AuthUser; sessionError: s
             </>
           ) : undefined
         }
+        developerSection={editing ? <DeveloperTesting /> : undefined}
         passwordSection={
           editing ? (
             <PasswordEditor

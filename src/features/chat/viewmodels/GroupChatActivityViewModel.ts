@@ -40,7 +40,8 @@ export class GroupChatActivityViewModel extends ObservableViewModel<{
           !previous?.cards &&
           value.failed === previous?.failed &&
           value.latest?.id === previous?.latest?.id &&
-          value.latest?.time === previous?.latest?.time
+          value.latest?.time === previous?.latest?.time &&
+          value.latest?.text === previous?.latest?.text
         )
           return;
         this.update({ entries: new Map(this.state.entries).set(key, value) });

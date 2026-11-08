@@ -16,6 +16,7 @@ const tripPublishInterval = 2000;
 export interface SharingState {
   preferences: SharingPreferences;
   ready: boolean;
+  stopPending: boolean;
   groups: PrivateGroup[];
   membershipsLoaded: boolean;
   directoryLoaded: boolean;
@@ -48,6 +49,8 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
   private dirty = new Set<string>();
   private publishing = new Set<string>();
   private published = new Set<string>();
+  private stopRequested = false;
+  private observedPreferences: SharingPreferences = { nearby: false, groups: false };
   constructor(
     private repository: SharingRepository | undefined,
     public user: AuthUser,
@@ -55,6 +58,7 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
     super({
       preferences: { nearby: false, groups: false },
       ready: false,
+      stopPending: false,
       groups: [],
       membershipsLoaded: false,
       directoryLoaded: false,
@@ -98,7 +102,11 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
         this.user.id,
         (preferences) => {
           if (version !== this.generation) return;
-          this.update({ preferences, ready: true });
+          this.observedPreferences = preferences;
+          this.update({
+            preferences: this.stopRequested ? { nearby: false, groups: false } : preferences,
+            ready: true,
+          });
           this.queue();
         },
         error,
@@ -165,7 +173,30 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
   savePreferences = (preferences: SharingPreferences) =>
     // The listener also receives edits from other devices while a save is pending.
     // Keep it as the source for both the switch value and location publishing.
-    this.run(() => this.repository!.savePreferences(this.user.id, preferences), 'preferences');
+    this.run(async (current) => {
+      await this.repository!.savePreferences(this.user.id, preferences);
+      if (!current()) return;
+      const wasStopped = this.stopRequested;
+      this.stopRequested = false;
+      this.update({
+        stopPending: false,
+        ...(wasStopped && { preferences: this.observedPreferences }),
+      });
+      this.queue();
+    }, 'preferences');
+  stopAllSharing = () =>
+    this.run(async (current) => {
+      // Stop publishing locally before waiting for the server. A failed save must
+      // never restore the previous audience or restart a trip on this device.
+      this.stopRequested = true;
+      this.endTrip();
+      this.update({ preferences: { nearby: false, groups: false }, stopPending: true });
+      this.queue();
+      await this.repository!.savePreferences(this.user.id, { nearby: false, groups: false }, true);
+      if (!current()) return;
+      this.stopRequested = false;
+      this.update({ stopPending: false, notice: 'Location and trip sharing stopped.' });
+    }, 'stop-sharing');
   invite = (group: PrivateGroup, peerId: string) =>
     this.run(async (current) => {
       await this.repository?.invite(this.user.id, group, peerId);
@@ -251,7 +282,7 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
     return true;
   };
   startTrip = (group: PrivateGroup) => {
-    if (this.state.busy || this.state.tripGroupId === group.id) return;
+    if (this.state.busy || this.state.stopPending || this.state.tripGroupId === group.id) return;
     if (!this.active) {
       this.update({ error: 'Enable GPS before sharing a trip.' });
       return;

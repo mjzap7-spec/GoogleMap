@@ -194,6 +194,7 @@ export function visibleConversations(
   rows: readonly Conversation[],
   expandedGroupId: string | undefined,
   term: string,
+  collapsedGroupId?: string,
 ) {
   return rows.flatMap((row) => {
     const matches = row.name.toLocaleLowerCase().includes(term);
@@ -205,6 +206,7 @@ export function visibleConversations(
         : term
           ? row.members.filter((m) => m.name.toLocaleLowerCase().includes(term))
           : [];
-    return matches || children.length ? [row, ...children] : [];
+    const collapsed = 'groupId' in row.target && row.target.groupId === collapsedGroupId;
+    return matches || children.length ? [row, ...(collapsed ? [] : children)] : [];
   });
 }

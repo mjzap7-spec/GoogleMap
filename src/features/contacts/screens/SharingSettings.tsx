@@ -1,7 +1,25 @@
 import React from 'react';
 import { SharingSettingsView } from '../views/SharingSettingsView';
 import { useSharing } from '../bindings/SharingProvider';
+import { useMap } from '../../map/bindings/useMap';
+import { useContacts } from '../bindings/useContacts';
 export function SharingSettings() {
   const { state, model } = useSharing();
-  return <SharingSettingsView state={state} onChange={model.savePreferences} />;
+  const map = useMap();
+  const contacts = useContacts();
+  return (
+    <SharingSettingsView
+      state={state}
+      onChange={model.savePreferences}
+      onStopAll={model.stopAllSharing}
+      groupNames={state.groups
+        .filter((group) => group.joinedIds.includes(model.user.id))
+        .map((group) => group.name)}
+      recording={map.state.recording}
+      onRecording={map.commands.toggleRecording}
+      recordingDisabled={!map.state.recording && map.state.recordedPoints >= 5000}
+      showPeople={contacts.state.showNearby}
+      onShowPeople={contacts.commands.setShowNearby}
+    />
+  );
 }

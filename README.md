@@ -24,7 +24,7 @@ From the mobile directory, run this in one terminal. The launcher starts Pixel_8
 npm run android:dev
 ```
 
-This reuses this project's running Metro server on ports 8081–8090, or starts one on the first available port, and opens both apps on that same server. A busy server gets up to 15 seconds to respond before the launcher checks for an available port. Keep the Metro terminal open. It restores ADB forwarding and identifies devices by AVD name. App data is preserved; both emulators need the development app installed first and Android Wi-Fi connected for Firebase. No build is required. You do not need to start separate Expo terminals or select a port manually. The older `android:open` command remains available for separate servers on 8081/8082.
+This reuses this project's running Metro server on ports 8081–8090, or starts one on the first available port, and opens both apps on that same server. A busy server gets up to 15 seconds to respond before the launcher checks for an available port. Keep the Metro terminal open. It restores ADB forwarding and identifies devices by AVD name. It waits for Android and its package manager before opening the app. If an emulator is missing the app, it installs this project's existing matching `android/app/build/outputs/apk/debug/app-debug.apk`; installed apps and their data are preserved. If no matching build exists, it tells you which emulator needs a one-time development build. Android Wi-Fi must be connected for Firebase. You do not need to start separate Expo terminals or select a port manually. The older `android:open` command remains available for separate servers on 8081/8082.
 
 ### Play a saved emulator route
 

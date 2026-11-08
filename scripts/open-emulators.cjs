@@ -3,6 +3,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { isProjectMetro } = require('./metro-server.cjs');
+const { refreshEmulatorClock } = require('./emulator-clock.cjs');
+const { waitForAndroid, ensureDevelopmentApp } = require('./emulator-app.cjs');
 
 const projectRoot = path.resolve(__dirname, '..');
 const packageName = 'com.anonymous.nestauth';
@@ -100,9 +102,9 @@ async function main(sharedPort, { bootMissing = false } = {}) {
       );
   }
   for (const { serial, name, port } of targets) {
-    const installed = adb(['-s', serial, 'shell', 'pm', 'path', packageName]).trim();
-    if (!installed.startsWith('package:'))
-      throw new Error(`${name}: install the development app first.`);
+    await waitForAndroid(adb, { serial, name });
+    ensureDevelopmentApp(adb, { serial, name }, projectRoot, packageName);
+    refreshEmulatorClock(adb, serial);
     adb(['-s', serial, 'shell', 'am', 'force-stop', packageName]);
     let xml;
     try {

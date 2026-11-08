@@ -12,6 +12,7 @@ interface PrimaryButtonProps {
   onPress: () => void;
   label: string;
   leadingIcon?: ReactNode;
+  variant?: 'primary' | 'secondary';
 }
 
 export function PrimaryButton({
@@ -20,6 +21,7 @@ export function PrimaryButton({
   onPress,
   label,
   leadingIcon,
+  variant = 'primary',
 }: PrimaryButtonProps) {
   const { t } = useTranslation();
   const isDisabled = busy || disabled;
@@ -59,6 +61,11 @@ export function PrimaryButton({
         onPressOut={() => animatePress(1)}
         style={({ pressed }) => [
           ui.button,
+          variant === 'secondary' && {
+            backgroundColor: colors.input,
+            borderWidth: 1,
+            borderColor: colors.border,
+          },
           leadingIcon
             ? { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingVertical: 12 }
             : null,
@@ -66,11 +73,19 @@ export function PrimaryButton({
         ]}
       >
         {busy ? (
-          <ActivityIndicator color={colors.buttonText} />
+          <ActivityIndicator color={variant === 'secondary' ? colors.accent : colors.buttonText} />
         ) : (
           <>
             {leadingIcon}
-            <Text style={[ui.buttonText, { flexShrink: 1, textAlign: 'center' }]}>{t(label)}</Text>
+            <Text
+              style={[
+                ui.buttonText,
+                { flexShrink: 1, textAlign: 'center' },
+                variant === 'secondary' && { color: colors.accent },
+              ]}
+            >
+              {t(label)}
+            </Text>
           </>
         )}
       </Pressable>

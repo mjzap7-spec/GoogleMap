@@ -142,6 +142,68 @@ function fixture(overrides = {}) {
     locations: (value) => locations(value),
   };
 }
+
+test('stop all sharing cancels a trip immediately, survives a failed save and confirms a retry', async () => {
+  let rejectSave, resolveSave;
+  const saves = [];
+  const f = fixture({
+    savePreferences: (...args) => {
+      saves.push(args);
+      return new Promise((resolve, reject) => {
+        rejectSave = reject;
+        resolveSave = resolve;
+      });
+    },
+  });
+  try {
+    f.preferences({ nearby: false, groups: true });
+    f.model.setPosition({ latitude: 28, longitude: -81, timestamp: Date.now() }, [], true);
+    f.model.startTrip(group);
+    await flush();
+    const pending = f.model.stopAllSharing();
+    assert.equal(f.model.getSnapshot().tripGroupId, '');
+    assert.deepEqual(f.model.getSnapshot().preferences, { nearby: false, groups: false });
+    assert.equal(f.model.getSnapshot().stopPending, true);
+    f.preferences({ nearby: true, groups: false });
+    assert.equal(
+      f.model.getSnapshot().preferences.nearby,
+      false,
+      'old remote state cannot restart publishing',
+    );
+    rejectSave(new Error('offline'));
+    await pending;
+    assert.equal(f.model.getSnapshot().notice, '');
+    assert.equal(f.model.getSnapshot().stopPending, true);
+    f.model.startTrip(group);
+    assert.equal(f.model.getSnapshot().tripGroupId, '');
+    await flush();
+    assert.equal(f.writes.at(-1)[2], null);
+    assert.deepEqual(saves[0], ['alice', { nearby: false, groups: false }, true]);
+    const retry = f.model.stopAllSharing();
+    f.preferences({ nearby: false, groups: false });
+    resolveSave();
+    await retry;
+    assert.equal(f.model.getSnapshot().stopPending, false);
+    assert.equal(f.model.getSnapshot().error, '');
+    assert.equal(f.model.getSnapshot().notice, 'Location and trip sharing stopped.');
+    assert.equal(saves.length, 2);
+  } finally {
+    f.model.dispose();
+  }
+});
+
+test('a confirmed stop clears the pending state and ordinary sharing audience', async () => {
+  const f = fixture();
+  try {
+    f.preferences({ nearby: true, groups: false });
+    await f.model.stopAllSharing();
+    assert.equal(f.model.getSnapshot().stopPending, false);
+    assert.equal(f.model.getSnapshot().notice, 'Location and trip sharing stopped.');
+    assert.deepEqual(f.model.getSnapshot().preferences, { nearby: false, groups: false });
+  } finally {
+    f.model.dispose();
+  }
+});
 test('the group restriction switches audiences and the main sharing switch allows a complete opt-out', () => {
   const {
     sharingAudience,

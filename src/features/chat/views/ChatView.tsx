@@ -1,43 +1,52 @@
-import React, { useDeferredValue, useMemo, useState } from 'react';
+import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  Animated,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { colors } from '../../../shared/theme/colors';
 import { Avatar } from '../../../shared/ui/Avatar';
-import { UnreadBadge, chatButtonLabel } from '../../../shared/ui/UnreadBadge';
 import { ScreenHeader } from '../../../shared/ui/ScreenHeader';
 import { TextField } from '../../../shared/ui/TextField';
 import {
-  selectConversation,
   visibleConversations,
   type Conversation,
   type ChatSelection,
 } from '../models/conversations';
+import { useLayoutMotion } from '../../../shared/motion/useLayoutMotion';
 import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
+import { ChatIcon } from '../../../shared/ui/ChatIcon';
 import type { PrivateGroup } from '../../contacts/models/sharing';
+import { ConversationRow } from './ConversationRow';
+import { useConversationMotion } from './chatMotion';
 interface Props {
   rows: Conversation[];
+  compact: boolean;
+  showingList: boolean;
+  onShowList: () => void;
   selected?: Conversation;
   transcript: React.ReactNode;
   expandedGroup?: PrivateGroup;
-  onSelect: (choice: ChatSelection) => void;
+  onSelect: (choice: ChatSelection, openThread?: boolean) => void;
   onBack: () => void;
   onRetry: () => void;
   onContacts: () => void;
   loading: boolean;
   error: string;
+  onThreadOptions: () => void;
 }
 export function ChatView({
   rows,
+  compact,
+  showingList,
+  onShowList,
   selected,
   expandedGroup,
   transcript,
@@ -47,6 +56,7 @@ export function ChatView({
   onContacts,
   loading,
   error,
+  onThreadOptions,
 }: Props) {
   const { t, language } = useTranslation();
   const formats = useMemo(
@@ -56,26 +66,122 @@ export function ChatView({
     }),
     [language],
   );
-  const compact = useWindowDimensions().width < 640;
   const [search, setSearch] = useState('');
+  // Folding a roster is local UI state, independent of the open conversation.
+  const [collapsedGroupId, setCollapsedGroupId] = useState<string>();
+  const expandedGroupId = expandedGroup?.id === collapsedGroupId ? undefined : expandedGroup?.id;
   const term = useDeferredValue(search.trim().toLocaleLowerCase());
   const filtered = useMemo(
-    () => visibleConversations(rows, expandedGroup?.id, term),
-    [rows, term, expandedGroup?.id],
+    () => visibleConversations(rows, expandedGroupId, term, collapsedGroupId),
+    [rows, term, expandedGroupId, collapsedGroupId],
+  );
+  const openRosters = useMemo(
+    () =>
+      new Set([
+        expandedGroupId,
+        ...filtered.flatMap((row) => ('memberId' in row.target ? [row.target.groupId] : [])),
+      ]),
+    [expandedGroupId, filtered],
   );
   const groupRoom = !!selected && 'groupId' in selected.target && !('memberId' in selected.target);
+  const threadMotion = useConversationMotion(showingList ? undefined : selected?.key, 12);
+  const listMotion = useConversationMotion(showingList ? 'list' : undefined, -8);
+  const animateLayout = useLayoutMotion();
+  const select = useCallback(
+    (choice: ChatSelection, openThread = true) => {
+      Keyboard.dismiss();
+      if (!openThread) animateLayout();
+      const room = choice.groupId && choice.key === 'group:' + choice.groupId;
+      setCollapsedGroupId(room && openRosters.has(choice.groupId) ? choice.groupId : undefined);
+      onSelect(choice, openThread);
+    },
+    [onSelect, openRosters, animateLayout],
+  );
+  const conversationHeader = selected ? (
+    <View style={[s.threadHeader, compact && s.phoneHeader]}>
+      {groupRoom ? (
+        <View style={s.headerGroup}>
+          <ContactsIcon />
+        </View>
+      ) : (
+        <Avatar uri={selected.avatarUrl} name={selected.name || t('Group member')} size={34} />
+      )}
+      <View style={s.headerIdentity}>
+        <Text accessibilityRole="header" numberOfLines={1} style={s.name}>
+          {selected.name || t('Group member')}
+        </Text>
+        {groupRoom ? (
+          <Text numberOfLines={1} style={s.hint}>
+            {t('Group chat') +
+              ' · ' +
+              t(expandedGroup?.joinedIds.length === 1 ? '1 member' : '{count} members', {
+                count: expandedGroup?.joinedIds.length ?? 0,
+              })}
+          </Text>
+        ) : (
+          'memberId' in selected.target &&
+          expandedGroup && (
+            <Text numberOfLines={1} style={s.hint}>
+              {expandedGroup.name}
+            </Text>
+          )
+        )}
+      </View>
+      {(compact || groupRoom) && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t(groupRoom ? 'Show group members' : 'All chats')}
+          onPress={() => {
+            setCollapsedGroupId(undefined);
+            onShowList();
+          }}
+          style={s.peopleButton}
+        >
+          <ContactsIcon />
+        </Pressable>
+      )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('Chat options')}
+        onPress={onThreadOptions}
+        style={s.peopleButton}
+      >
+        <Text style={{ color: colors.accent, fontSize: 25, lineHeight: 28 }}>⋮</Text>
+      </Pressable>
+    </View>
+  ) : null;
   return (
-    <KeyboardAvoidingView enabled={Platform.OS === 'ios'} behavior="padding" style={s.screen}>
-      <ScreenHeader title={t('Chats')} onBack={onBack} />
-      <TextField
-        style={s.search}
-        accessibilityLabel={t('Search chats')}
-        placeholder={t('Search chats')}
-        value={search}
-        onChangeText={setSearch}
-        returnKeyType="search"
-        autoCorrect={false}
-      />
+    <KeyboardAvoidingView enabled={Platform.OS !== 'web'} behavior="padding" style={s.screen}>
+      <ScreenHeader title={compact && !showingList ? undefined : t('Chats')} onBack={onBack}>
+        {compact && !showingList ? conversationHeader : null}
+      </ScreenHeader>
+      {(!compact || showingList) && (
+        <View style={s.searchRow}>
+          <View accessible={false} style={s.searchIcon}>
+            <View style={s.searchHandle} />
+          </View>
+          <TextField
+            style={[s.search, !!search && s.searchWithClear]}
+            accessibilityLabel={t('Search chats')}
+            placeholder={t('Search chats')}
+            value={search}
+            onChangeText={setSearch}
+            returnKeyType="search"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {!!search && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('Clear search')}
+              onPress={() => setSearch('')}
+              style={s.clearSearch}
+            >
+              <Text style={s.clearIcon}>×</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
       {!!error && (
         <Pressable accessibilityRole="button" style={s.error} onPress={onRetry}>
           <Text style={s.hint}>
@@ -84,31 +190,50 @@ export function ChatView({
         </Pressable>
       )}
       <View style={s.panes}>
-        <FlatList
-          style={[s.sidebar, { width: compact ? 96 : 260 }]}
+        <Animated.FlatList<Conversation>
+          style={[
+            s.sidebar,
+            compact && listMotion,
+            compact ? s.phoneList : { width: 276 },
+            compact && !showingList && s.hidden,
+          ]}
+          contentContainerStyle={[s.sidebarContent, !filtered.length && s.emptyList]}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
           data={filtered}
           keyExtractor={(row) => row.key}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           ListEmptyComponent={
             loading ? (
               <ActivityIndicator color={colors.accent} />
             ) : (
-              <Text style={s.empty}>{t('No matches')}</Text>
+              <View style={s.emptyState}>
+                <View style={s.emptyIcon}>
+                  <ChatIcon unread={0} />
+                </View>
+                <Text style={s.empty}>{t(search ? 'No matches' : 'Choose a conversation')}</Text>
+                {!search && (
+                  <Pressable accessibilityRole="button" onPress={onContacts} style={s.link}>
+                    <Text style={s.accent}>{t('Contacts')}</Text>
+                  </Pressable>
+                )}
+              </View>
             )
           }
           renderItem={({ item, index }) => {
             const member = 'memberId' in item.target;
             const room = 'groupId' in item.target && !member;
-            const name = item.name || t('Group member');
+            const expanded =
+              room && 'groupId' in item.target && openRosters.has(item.target.groupId);
             // Collapsed rooms also indicate unread private threads inside the room.
             const unread =
               (item.unread ?? 0) +
-              ('groupId' in item.target && room && item.target.groupId !== expandedGroup?.id
+              (room && !expanded
                 ? (item.members?.reduce((sum, m) => sum + (m.unread ?? 0), 0) ?? 0)
                 : 0);
-            const actionLabel = t(room ? 'Open group chat: {name}' : 'Private chat with {name}', {
-              name,
-            });
             const last = item.activityTime ? new Date(item.activityTime) : undefined;
             const timestamp =
               last &&
@@ -123,97 +248,87 @@ export function ChatView({
                     {t('Members')}
                   </Text>
                 )}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={chatButtonLabel(t, actionLabel, unread)}
-                  accessibilityState={{ selected: item.key === selected?.key }}
-                  onPress={() => onSelect(selectConversation(item))}
-                  style={({ pressed }) => [
-                    s.row,
-                    compact ? s.compact : s.wide,
-                    member && s.member,
-                    item.key === selected?.key && s.active,
-                    pressed && s.pressed,
-                  ]}
-                >
-                  <View>
-                    {room ? (
-                      <View style={s.groupIcon}>
-                        <ContactsIcon />
-                      </View>
-                    ) : (
-                      <Avatar
-                        uri={item.avatarUrl}
-                        name={name}
-                        size={member ? 29 : compact ? 36 : 42}
-                      />
-                    )}
-                    <UnreadBadge count={unread} />
-                  </View>
-                  <View style={compact ? s.compactLabel : s.identity}>
-                    <Text numberOfLines={compact ? 2 : 1} style={[s.name, compact && s.small]}>
-                      {name}
-                    </Text>
-                    {!!timestamp && compact && (
-                      <Text numberOfLines={1} style={[s.time, s.centered]}>
-                        {timestamp}
-                      </Text>
-                    )}
-                    {!compact && (
-                      <Text numberOfLines={1} style={s.hint}>
-                        {item.preview?.text ??
-                          t(room ? 'Group chat' : member ? 'Group member' : 'Contact')}
-                      </Text>
-                    )}
-                  </View>
-                  {!!timestamp && !compact && (
-                    <Text numberOfLines={1} style={s.time}>
-                      {timestamp}
-                    </Text>
-                  )}
-                </Pressable>
+                <ConversationRow
+                  item={item}
+                  compact={false}
+                  active={item.key === selected?.key}
+                  expanded={room ? expanded : undefined}
+                  unread={unread}
+                  timestamp={timestamp}
+                  onSelect={select}
+                  onToggleMembers={
+                    room
+                      ? () =>
+                          select(
+                            {
+                              key: item.key,
+                              groupId: 'groupId' in item.target ? item.target.groupId : undefined,
+                            },
+                            false,
+                          )
+                      : undefined
+                  }
+                />
               </View>
             );
           }}
         />
-        <View style={s.thread}>
+        <Animated.View style={[s.thread, threadMotion, showingList && s.hidden]}>
           {selected ? (
             <>
-              <View style={s.threadHeader}>
-                <Text accessibilityRole="header" numberOfLines={1} style={s.name}>
-                  {selected.name || t('Group member')}
-                </Text>
-                {groupRoom ? (
-                  <Text style={s.hint}>
-                    {t('Group chat') +
-                      ' · ' +
-                      t(expandedGroup?.joinedIds.length === 1 ? '1 member' : '{count} members', {
-                        count: expandedGroup?.joinedIds.length ?? 0,
-                      })}
-                  </Text>
-                ) : (
-                  'memberId' in selected.target &&
-                  expandedGroup && <Text style={s.hint}>{expandedGroup.name}</Text>
-                )}
-              </View>
+              {!compact && conversationHeader}
               {transcript}
             </>
           ) : (
             <View style={s.placeholder}>
+              <View style={s.emptyIcon}>
+                <ChatIcon unread={0} />
+              </View>
               <Text style={s.hint}>{t('Choose a conversation')}</Text>
               <Pressable accessibilityRole="button" style={s.link} onPress={onContacts}>
                 <Text style={s.accent}>{t('Contacts')}</Text>
               </Pressable>
             </View>
           )}
-        </View>
+        </Animated.View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  search: { marginHorizontal: 16, minHeight: 44, marginTop: 4, marginBottom: 10 },
+  searchRow: { marginHorizontal: 14, marginTop: 4, marginBottom: 12, justifyContent: 'center' },
+  search: { minHeight: 46, marginBottom: 0, paddingLeft: 40, fontSize: 14, borderRadius: 16 },
+  searchWithClear: { paddingRight: 44 },
+  searchIcon: {
+    position: 'absolute',
+    left: 15,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    borderWidth: 1.6,
+    borderColor: colors.muted,
+    zIndex: 1,
+    pointerEvents: 'none',
+  },
+  searchHandle: {
+    position: 'absolute',
+    width: 6,
+    height: 1.6,
+    backgroundColor: colors.muted,
+    right: -5,
+    bottom: -2,
+    transform: [{ rotate: '45deg' }],
+  },
+  clearSearch: {
+    position: 'absolute',
+    right: 0,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearIcon: { color: colors.muted, fontSize: 24 },
   panes: {
     flex: 1,
     flexDirection: 'row',
@@ -223,62 +338,72 @@ const s = StyleSheet.create({
   sidebar: {
     flexGrow: 0,
     flexShrink: 0,
-    backgroundColor: colors.input,
+    backgroundColor: '#15171F',
     borderRightWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  row: {
+  sidebarContent: { paddingTop: 6, paddingBottom: 16 },
+  emptyList: { flexGrow: 1, justifyContent: 'center' },
+  emptyState: { alignItems: 'center', padding: 24, gap: 8 },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 24,
+    backgroundColor: '#BCB5FF10',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 5,
-    padding: 7,
-    marginHorizontal: 4,
-    marginVertical: 2,
-    borderRadius: 12,
+    marginBottom: 8,
   },
-  active: { backgroundColor: '#343149' },
+  phoneList: { flex: 1, flexGrow: 1, borderRightWidth: 0, backgroundColor: colors.background },
+  hidden: { display: 'none' },
+  peopleButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#BCB5FF14',
+  },
   rosterLabel: {
     color: colors.muted,
     fontWeight: '600',
     fontSize: 11,
-    marginHorizontal: 12,
-    marginTop: 6,
+    textAlign: 'left',
+    marginHorizontal: 18,
+    marginTop: 12,
     marginBottom: 4,
   },
-  pressed: { opacity: 0.72 },
-  member: {
-    marginLeft: 12,
-    marginVertical: 0,
-    borderLeftWidth: 2,
-    borderLeftColor: '#4D4963',
-    borderTopLeftRadius: 0,
-    borderBottomLeftRadius: 0,
-    paddingVertical: 6,
-  },
-  groupIcon: {
-    backgroundColor: '#BCB5FF18',
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  compact: { paddingVertical: 10 },
-  wide: { flexDirection: 'row', minHeight: 64 },
-  identity: { flex: 1 },
-  compactLabel: { alignSelf: 'stretch' },
   name: { color: colors.text, fontWeight: '600', fontSize: 16 },
-  small: { fontSize: 12, textAlign: 'center' },
-  time: { color: colors.muted, fontSize: 11, fontVariant: ['tabular-nums'] },
-  centered: { textAlign: 'center' },
-  hint: { fontSize: 13, color: colors.muted },
+  hint: { fontSize: 12, lineHeight: 17, color: colors.muted },
   empty: { padding: 8, color: colors.muted, textAlign: 'center' },
   thread: { flex: 1, minWidth: 0 },
+  phoneHeader: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
+    minHeight: 56,
+    borderBottomWidth: 0,
+    gap: 9,
+  },
   threadHeader: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    gap: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    minHeight: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+  },
+  headerIdentity: { flex: 1, gap: 2 },
+  headerGroup: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: '#BCB5FF18',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 10 },
   link: { minHeight: 44, justifyContent: 'center' },

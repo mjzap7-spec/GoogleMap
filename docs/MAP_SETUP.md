@@ -18,6 +18,8 @@ npx expo run:android
 
 Web preview works with npx expo start --web. A network connection and WebGL-capable graphics are required. A failed load displays a retry action. Keep the visible OpenStreetMap/OpenMapTiles attribution; no bulk tile downloads or offline cache have been added.
 
+If the emulator has internet but the map cannot load, check **Android Settings → System → Date & time → Set time automatically**. A clock left behind after computer sleep or snapshot restore can cause HTTPS certificate date errors. `npm run android:dev` and `npm run android:open` check each emulator's clock and request a network time refresh when automatic time is enabled and the clock differs from the computer by more than two minutes. They preserve manual clock settings. The map reports certificate date failures specifically and retries when you return from Settings; **Reload map** also retries immediately. Certificate validation remains enabled.
+
 The blue GPS marker shows your device location, and the blue line shows your travelled path. The map does not use the saved profile city. Until GPS is available, it displays a waiting/permission message.
 
 ## Travelled path tracking

@@ -18,10 +18,10 @@ export function chatButtonLabel(
 }
 
 /** The parent button announces the count. This overlay doesn't change its touch target. */
-export function UnreadBadge({ count }: { count: number }) {
+export function UnreadBadge({ count, inline = false }: { count: number; inline?: boolean }) {
   if (!count) return null;
   return (
-    <View pointerEvents="none" accessible={false} style={styles.badge}>
+    <View pointerEvents="none" accessible={false} style={[styles.badge, inline && styles.inline]}>
       <Text accessible={false} numberOfLines={1} maxFontSizeMultiplier={1.2} style={styles.text}>
         {unreadLabel(count)}
       </Text>
@@ -29,6 +29,7 @@ export function UnreadBadge({ count }: { count: number }) {
   );
 }
 const styles = StyleSheet.create({
+  inline: { position: 'relative', top: 0, right: 0, minWidth: 21, minHeight: 21 },
   badge: {
     position: 'absolute',
     top: -4,

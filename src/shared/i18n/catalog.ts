@@ -1,4 +1,23 @@
+import { socialExperienceCatalog } from './socialExperienceCatalog';
+import { chatActionsCatalog } from './chatActionsCatalog';
 export const catalog: Record<string, readonly string[]> = {
+  ...socialExperienceCatalog,
+  ...chatActionsCatalog,
+  'The map connection failed a date/time check. Enable automatic date and time on your device, then reload the map.':
+    [
+      'La conexión del mapa falló en la comprobación de fecha y hora. Activa la fecha y hora automáticas en tu dispositivo y vuelve a cargar el mapa.',
+      'La connexion à la carte a échoué lors de la vérification de la date et de l’heure. Activez la date et l’heure automatiques sur votre appareil, puis rechargez la carte.',
+      'Die Datums- und Zeitprüfung der Kartenverbindung ist fehlgeschlagen. Aktiviere Datum und Uhrzeit automatisch auf deinem Gerät und lade die Karte erneut.',
+      '地图连接未通过日期和时间验证。请在设备上启用自动日期和时间，然后重新加载地图。',
+      '地図への接続で日時の確認に失敗しました。端末の日時の自動設定を有効にしてから、地図を再読み込みしてください。',
+    ],
+  'Could not securely connect to the map service. Please try again later.': [
+    'No se pudo conectar de forma segura al servicio de mapas. Inténtalo de nuevo más tarde.',
+    'Impossible de se connecter de manière sécurisée au service de cartes. Réessayez plus tard.',
+    'Es konnte keine sichere Verbindung zum Kartendienst hergestellt werden. Bitte versuche es später erneut.',
+    '无法安全连接到地图服务，请稍后重试。',
+    '地図サービスに安全に接続できませんでした。しばらくしてからもう一度お試しください。',
+  ],
   'Choose emoji': [
     'Elegir emoji',
     'Choisir un emoji',
@@ -182,13 +201,43 @@ export const catalog: Record<string, readonly string[]> = {
       '先显示你创建的群组，再显示他人创建的群组。按名称搜索，点按右侧的加入图标即可加入或重新加入。已加入的群组会显示在聊天中。',
       '自分が作成したグループの後に、ほかの人が作成したグループが表示されます。名前で検索し、右の参加アイコンで参加・再参加できます。参加中のグループはチャットに表示されます。',
     ],
-  'Select a group to chat with all its members. Select a name underneath for a private conversation within that group.':
+  'Select a person to open a private chat. Tap a group to open its chat and show members; tap the group again to hide members. Group messages are visible to all members. Use the smiley button to add emoji.':
     [
-      'Elige un grupo para hablar con todos sus miembros. Elige un nombre debajo para conversar en privado dentro de ese grupo.',
-      'Sélectionnez un groupe pour discuter avec tous ses membres. Sélectionnez un nom en dessous pour une discussion privée au sein du groupe.',
-      'Wähle eine Gruppe, um mit allen Mitgliedern zu chatten. Wähle einen Namen darunter für eine private Unterhaltung innerhalb der Gruppe.',
-      '选择群组即可与全体成员聊天。选择下方的姓名即可与该成员在群内私聊。',
-      'グループを選ぶとメンバー全員と会話できます。その下の名前を選ぶと、その人とグループ内で個別に会話できます。',
+      'Selecciona a una persona para abrir un chat privado. Toca un grupo para abrir su chat y mostrar los miembros; vuelve a tocarlo para ocultarlos. Todos los miembros pueden ver los mensajes del grupo. Usa el botón de la cara sonriente para añadir emojis.',
+      'Sélectionnez une personne pour ouvrir une discussion privée. Touchez un groupe pour ouvrir sa discussion et afficher ses membres ; touchez-le à nouveau pour les masquer. Tous les membres peuvent voir les messages du groupe. Utilisez le bouton sourire pour ajouter des emojis.',
+      'Wähle eine Person für einen privaten Chat. Tippe auf eine Gruppe, um ihren Chat zu öffnen und die Mitglieder anzuzeigen; tippe erneut, um sie auszublenden. Alle Mitglieder sehen die Gruppennachrichten. Über die Smiley-Taste kannst du Emojis einfügen.',
+      '选择一位用户即可打开私聊。点按群组可打开群聊并显示成员，再次点按可隐藏成员列表。所有成员都能看到群消息。点按笑脸按钮可添加表情。',
+      '相手を選ぶと個別チャットが開きます。グループをタップするとグループチャットとメンバーが表示され、もう一度タップするとメンバー一覧を閉じます。グループのメッセージは全員が見られます。スマイルボタンで絵文字を追加できます。',
+    ],
+  'Message status': [
+    'Estado del mensaje',
+    'Statut des messages',
+    'Nachrichtenstatus',
+    '消息状态',
+    'メッセージの状態',
+  ],
+  'Sending… means your message is waiting to send. One check (✓) means it was sent successfully. Two checks (✓✓) mean the other person has read it; in a group, at least one other member has read it. Checks update automatically when both devices are online.':
+    [
+      'Enviando… indica que tu mensaje está pendiente de envío. Una marca (✓) indica que se envió correctamente. Dos marcas (✓✓) indican que la otra persona lo leyó; en un grupo, al menos otro miembro lo leyó. Las marcas se actualizan automáticamente cuando ambos dispositivos tienen conexión.',
+      'Envoi… indique que votre message attend d’être envoyé. Une coche (✓) signifie qu’il a été envoyé. Deux coches (✓✓) signifient que l’autre personne l’a lu ; dans un groupe, au moins un autre membre l’a lu. Les coches se mettent à jour automatiquement lorsque les deux appareils sont en ligne.',
+      'Wird gesendet… bedeutet, dass deine Nachricht noch auf den Versand wartet. Ein Häkchen (✓) bedeutet, dass sie erfolgreich gesendet wurde. Zwei Häkchen (✓✓) bedeuten, dass die andere Person sie gelesen hat; in einer Gruppe hat mindestens ein anderes Mitglied sie gelesen. Die Häkchen werden automatisch aktualisiert, sobald beide Geräte online sind.',
+      '“正在发送…”表示消息正在等待发送。一个勾（✓）表示发送成功。两个勾（✓✓）表示对方已读；在群聊中，表示至少一位其他成员已读。双方设备联网时，勾号会自动更新。',
+      '「送信中…」は送信待ちの状態です。チェック1つ（✓）は送信済み、2つ（✓✓）は相手が読んだことを示します。グループでは、ほかのメンバーが少なくとも1人読んだことを示します。両方の端末がオンラインになると自動で更新されます。',
+    ],
+  'Unread messages': [
+    'Mensajes sin leer',
+    'Messages non lus',
+    'Ungelesene Nachrichten',
+    '未读消息',
+    '未読メッセージ',
+  ],
+  'The Chats button shows your total unread message count. Badges beside a person or group show their unread count. Open the conversation and view messages to mark them as read. A collapsed group also includes unread private messages from its members.':
+    [
+      'El botón Chats muestra el total de mensajes sin leer. Las insignias junto a una persona o grupo muestran su número de mensajes sin leer. Abre la conversación y mira los mensajes para marcarlos como leídos. Un grupo contraído también incluye los mensajes privados sin leer de sus miembros.',
+      'Le bouton Discussions indique le nombre total de messages non lus. Les badges à côté d’une personne ou d’un groupe indiquent leur nombre de messages non lus. Ouvrez la conversation et consultez les messages pour les marquer comme lus. Un groupe replié inclut aussi les messages privés non lus de ses membres.',
+      'Die Chats-Taste zeigt die Gesamtzahl deiner ungelesenen Nachrichten. Die Zahlen neben Personen oder Gruppen zeigen die jeweiligen ungelesenen Nachrichten. Öffne die Unterhaltung und sieh dir die Nachrichten an, um sie als gelesen zu markieren. Eine eingeklappte Gruppe zählt auch ungelesene private Nachrichten ihrer Mitglieder mit.',
+      '聊天按钮显示未读消息总数。用户或群组旁的角标显示各自的未读数量。打开会话并查看消息即可标为已读。群组收起时，角标也会包含成员发来的未读私聊消息。',
+      'チャットボタンには未読メッセージの合計が表示されます。相手やグループの横のバッジは、それぞれの未読件数です。会話を開いてメッセージを見ると既読になります。メンバー一覧を閉じたグループには、メンバーからの未読の個別メッセージも含まれます。',
     ],
   'Change the nickname and tap Save. Profile details are provided by your contact.': [
     'Cambia el apodo y toca Guardar. El contacto proporciona los datos del perfil.',
@@ -211,13 +260,13 @@ export const catalog: Record<string, readonly string[]> = {
     '使用邮箱或 Google 注册，完善资料后即可打开地图。',
     'メールまたは Google で登録し、プロフィールを入力すると地図を開けます。',
   ],
-  'Use New contact to send a request by email. Open the envelope to review requests and responses.':
+  'Use New contact to send a request by email. Open the inbox icon to review requests and responses. Show all opens your full Contacts list. Use the pencil icon to edit a nickname or the chat icon to send a message.':
     [
-      'Usa Nuevo contacto para enviar una solicitud por correo. Abre el sobre para revisar las solicitudes y respuestas.',
-      'Utilisez Nouveau contact pour envoyer une demande par e-mail. L’enveloppe affiche les demandes et réponses.',
-      'Sende mit Neuer Kontakt eine Anfrage per E-Mail. Über den Briefumschlag siehst du Anfragen und Antworten.',
-      '用新建联系人按邮箱发送请求。点按信封查看请求和回复。',
-      '新しい連絡先からメールでリクエストを送り、封筒からリクエストや返信を確認できます。',
+      'Usa Nuevo contacto para enviar una solicitud por correo. Abre el icono de la bandeja de entrada para revisar solicitudes y respuestas. Mostrar todos abre la lista completa de contactos. Usa el lápiz para editar un apodo o el icono de chat para enviar un mensaje.',
+      'Utilisez Nouveau contact pour envoyer une demande par e-mail. Ouvrez la boîte de réception pour consulter les demandes et réponses. Tout afficher ouvre la liste complète des contacts. Le crayon permet de modifier un surnom et l’icône de discussion d’envoyer un message.',
+      'Sende mit Neuer Kontakt eine Anfrage per E-Mail. Über das Posteingangssymbol siehst du Anfragen und Antworten. Alle anzeigen öffnet deine vollständige Kontaktliste. Mit dem Stiftsymbol bearbeitest du einen Spitznamen, mit dem Chatsymbol sendest du eine Nachricht.',
+      '使用“新建联系人”通过邮箱发送请求。点按收件箱图标查看请求和回复。“显示全部”可打开完整联系人列表。点按铅笔图标修改昵称，或点按聊天图标发送消息。',
+      '新しい連絡先からメールで申請を送れます。受信トレイのアイコンで申請と返答を確認できます。すべて表示で連絡先一覧を開きます。鉛筆アイコンでニックネームを変更し、チャットアイコンでメッセージを送れます。',
     ],
   'Search groups': [
     'Buscar grupos',
@@ -279,6 +328,15 @@ export const catalog: Record<string, readonly string[]> = {
     '以前のメッセージ',
   ],
   'Sending…': ['Enviando…', 'Envoi…', 'Wird gesendet…', '正在发送…', '送信中…'],
+  Sent: ['Enviado', 'Envoyé', 'Gesendet', '已发送', '送信済み'],
+  Read: ['Leído', 'Lu', 'Gelesen', '已读', '既読'],
+  'Read status unavailable. Retry.': [
+    'Estado de lectura no disponible. Reintentar.',
+    'Statut de lecture indisponible. Réessayer.',
+    'Lesestatus nicht verfügbar. Erneut versuchen.',
+    '无法获取已读状态。请重试。',
+    '既読状態を取得できません。再試行してください。',
+  ],
   Message: ['Mensaje', 'Message', 'Nachricht', '消息', 'メッセージ'],
   'Send message': [
     'Enviar mensaje',
@@ -453,13 +511,13 @@ export const catalog: Record<string, readonly string[]> = {
       '允许访问位置后，打开应用即开始记录轨迹。点按中间按钮暂停或继续。清除路径可删除已记录的轨迹。',
       '位置情報へのアクセスを許可すると、アプリを開いたときに経路の記録が始まります。中央のボタンで一時停止・再開できます。経路を消去すると記録線が削除されます。',
     ],
-  'Tap Share my trip in a joined group. Members can turn on Show Nearby Users to see your route and tap Follow to track you. Drag the map to stop following. Tap Stop on your own map to end sharing.':
+  'Tap Share my trip in a joined group. Members can turn on Show people to see your route and tap Follow to track you. Drag the map to stop following. Tap Stop on your own map to end sharing.':
     [
-      'Toca Compartir mi recorrido en un grupo al que te uniste. Sus miembros pueden activar Mostrar usuarios cercanos para ver tu ruta y tocar Seguir. Arrastra el mapa para dejar de seguir. Toca Detener en tu mapa para dejar de compartir.',
-      'Touchez Partager mon trajet dans un groupe rejoint. Les membres peuvent activer Afficher les utilisateurs à proximité pour voir votre parcours et toucher Suivre. Faites glisser la carte pour arrêter de suivre. Touchez Arrêter sur votre carte pour mettre fin au partage.',
-      'Tippe in einer deiner Gruppen auf Meine Fahrt teilen. Mitglieder können mit Nutzer in der Nähe anzeigen deine Route sehen und dir mit Folgen folgen. Verschiebe die Karte, um das Folgen zu beenden. Tippe auf deiner Karte auf Stoppen, um die Freigabe zu beenden.',
-      '在已加入的群组中点按共享我的行程。成员可以打开显示附近用户查看你的路线，并点按跟随。拖动地图可停止跟随。在自己的地图上点按停止可结束共享。',
-      '参加中のグループで移動を共有をタップします。メンバーは周辺のユーザー表示をオンにして経路を確認し、フォローで移動を追えます。地図をドラッグするとフォローを解除できます。共有を終了するには、自分の地図で停止をタップします。',
+      'Toca Compartir mi recorrido en un grupo al que te uniste. Sus miembros pueden activar Mostrar personas para ver tu ruta y tocar Seguir. Arrastra el mapa para dejar de seguir. Toca Detener en tu mapa para dejar de compartir.',
+      'Touchez Partager mon trajet dans un groupe rejoint. Les membres peuvent activer Afficher les personnes pour voir votre parcours et toucher Suivre. Faites glisser la carte pour arrêter de suivre. Touchez Arrêter sur votre carte pour mettre fin au partage.',
+      'Tippe in einer deiner Gruppen auf Meine Fahrt teilen. Mitglieder können mit Personen anzeigen deine Route sehen und dir mit Folgen folgen. Verschiebe die Karte, um das Folgen zu beenden. Tippe auf deiner Karte auf Stoppen, um die Freigabe zu beenden.',
+      '在已加入的群组中点按共享我的行程。成员可以打开显示用户查看你的路线，并点按跟随。拖动地图可停止跟随。在自己的地图上点按停止可结束共享。',
+      '参加中のグループで移動を共有をタップします。メンバーはユーザーを表示をオンにして経路を確認し、フォローで移動を追えます。地図をドラッグするとフォローを解除できます。共有を終了するには、自分の地図で停止をタップします。',
     ],
   'Open Contacts, then Private groups. Create a group, expand it, and invite an existing contact. Invitees must join before viewing group locations. Groups support up to 10 members.':
     [

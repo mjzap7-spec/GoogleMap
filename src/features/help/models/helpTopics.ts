@@ -4,16 +4,16 @@ export const topics = [
     'Use the bottom toolbar for Contacts, recording, Settings, and Chats. Tap Help at the top right for guidance.',
   ],
   [
-    'Show Nearby Users',
-    'Turn on Show Nearby Users to see people sharing nearby or in a group you joined. Turn it off to hide everyone else on your map.',
+    'People on the map',
+    'Turn on Show people, then filter by All, Contacts, Groups, or Nearby. These controls only change your map view. They do not share your location. Tap a person to see when their location last updated. Faded markers indicate older updates.',
   ],
   [
     'Location sharing',
-    'Turn on Share my location in Settings to share within 1 km. Turn on Share with private groups to limit sharing to fellow members. Shared trips have their own Stop button.',
+    'In Settings, choose No one, Nearby users within 1 km, or My groups under Who can see me. Stop all sharing ends location and trip sharing. Recording your path and showing other people are separate controls. If stopping cannot be confirmed online, retry when connected.',
   ],
   [
     'Contacts and requests',
-    'Use New contact to send a request by email. Open the envelope to review requests and responses.',
+    'Use New contact to send a request by email. Open the inbox icon to review requests and responses. Show all opens your full Contacts list. Use the pencil icon to edit a nickname or the chat icon to send a message.',
   ],
   [
     'Private groups',
@@ -21,7 +21,7 @@ export const topics = [
   ],
   [
     'Trip sharing',
-    'Tap Share my trip in a joined group. Members can turn on Show Nearby Users to see your route and tap Follow to track you. Drag the map to stop following. Tap Stop on your own map to end sharing.',
+    'Tap Share my trip in a joined group. Members can turn on Show people to see your route and tap Follow to track you. Drag the map to stop following. Tap Stop on your own map to end sharing.',
   ],
   [
     'Recording',
@@ -49,7 +49,15 @@ export const topics = [
   ],
   [
     'Chats',
-    'Select a group to chat with all its members. Select a name underneath for a private conversation within that group.',
+    'On phones, select a conversation to open full-width messages. Go back or tap the people button to return to the list. Use the arrow beside a group to show or hide members. Group messages go to everyone in the group; selecting a person opens a private chat. The smiley button adds emoji.',
+  ],
+  [
+    'Message status',
+    'Sending… means your message is waiting to send. One check (✓) means it was sent successfully. Two checks (✓✓) mean the other person has read it; in a group, at least one other member has read it. Checks update automatically when both devices are online.',
+  ],
+  [
+    'Unread messages',
+    'The Chats button shows your total unread message count. Badges beside a person or group show their unread count. Open the conversation and view messages to mark them as read. A collapsed group also includes unread private messages from its members.',
   ],
   [
     'Edit contact',
@@ -60,6 +68,14 @@ export const topics = [
     'Use your email and password or continue with Google. Forgot password sends a reset link.',
   ],
   ['Create account', 'Register with email or Google, then complete your profile to open the map.'],
+  [
+    'Message actions',
+    'Long-press a message to select it. Use the top toolbar to reply, edit your own message, or delete. Select more messages with the checkboxes, or select the entire chat. With multiple selections only Delete is available.',
+  ],
+  [
+    'Local chat history',
+    'Select one or more messages and tap the trash icon to delete them immediately on this device, without confirmation. Other participants keep their messages. The three-dot chat menu lets you clear the chat history. New messages still appear. Local deletion survives reopening the app, but clearing app storage or reinstalling resets it.',
+  ],
 ] as const;
 export function screenHelp(path: string, section?: string) {
   if (path === '/contacts')

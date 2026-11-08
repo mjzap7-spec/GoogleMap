@@ -6,6 +6,21 @@ service cloud.firestore {
   function profile(uid) { return get(/databases/$(database)/documents/users/$(uid)).data; }
   function nameValid(value) { return value is string && value.size()>0 && value.size()<=100 && value.matches('.*[^ ].*'); }
   function avatarValid(value) { return value == null || (value is string && value.size()<2048 && value.matches('https://.*')); }
+  function messageText(value) { return value is string && value.size()<=2000 && value.matches('(?s).*\\S.*'); }
+  function validMessageEdit() {
+   return resource.data.fromId == request.auth.uid
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text','editedAt'])
+    && messageText(request.resource.data.text) && request.resource.data.editedAt == request.time;
+  }
+  function validReply(messagesPath, messageId) {
+   let d = request.resource.data;
+   return !('replyTo' in d) || (d.replyTo is string && d.replyTo.matches('^[^/]{1,128}$')
+    && d.replyTo != messageId && exists(/$(messagesPath)/$(d.replyTo)));
+  }
+  function validSharedRead(readerId) {
+   return own(readerId) && request.resource.data.keys().hasOnly(['through'])
+    && request.resource.data.through is timestamp && request.resource.data.through <= request.time;
+  }
   function connected(uid, peer) {
    return exists(/databases/$(database)/documents/users/$(uid)/contacts/$(peer))
     && exists(/databases/$(database)/documents/users/$(peer)/contacts/$(uid))
@@ -60,13 +75,24 @@ service cloud.firestore {
     function validPreview() {
      let d = request.resource.data;
      let thread = get(/databases/$(database)/documents/users/$(userId)/contacts/$(peerId)).data.requestId;
-     let msg = getAfter(/databases/$(database)/documents/contactRequests/$(thread)/messages/$(d.messageId)).data;
+     let path = /databases/$(database)/documents/contactRequests/$(thread)/messages/$(d.messageId);
+     let msg = getAfter(path).data;
      return d.keys().hasOnly(['messageId','requestId','text','updatedAt']) && d.requestId == thread
-      && d.text == msg.text && d.updatedAt == request.time
-      && msg.createdAt == request.time && msg.fromId == request.auth.uid;
+      && d.text == msg.text && msg.fromId == request.auth.uid
+      && ((d.updatedAt == request.time && msg.createdAt == request.time)
+       || (resource.data.messageId == d.messageId && d.updatedAt == resource.data.updatedAt
+        && msg.editedAt == request.time));
+    }
+    function deletedPreview() {
+     let d = request.resource.data;
+     let path = /databases/$(database)/documents/contactRequests/$(resource.data.requestId)/messages/$(resource.data.messageId);
+     return d.diff(resource.data).affectedKeys().hasOnly(['text']) && d.text == ''
+      && get(path).data.fromId == request.auth.uid && !existsAfter(path);
     }
     allow create, update: if signedIn() && request.auth.uid in [userId,peerId]
      && connected(userId,peerId) && validPreview();
+    allow update: if signedIn() && request.auth.uid in [userId,peerId]
+     && connected(userId,peerId) && deletedPreview();
    }
    match /contactEvents/{eventId} {
     allow read, delete: if own(userId);
@@ -128,18 +154,25 @@ service cloud.firestore {
    allow delete: if signedIn() && resource.data.uid == request.auth.uid;
   }
   match /contactRequests/{requestId} {
-   match /messages/{messageId} {
-    function canChat() {
+   function canChat() {
      let pair = get(/databases/$(database)/documents/contactRequests/$(requestId)).data;
      return signedIn() && request.auth.uid in [pair.fromId,pair.toId] && pair.status == 'accepted'
       && connected(pair.fromId,pair.toId)
       && get(/databases/$(database)/documents/users/$(pair.fromId)/contacts/$(pair.toId)).data.requestId == requestId;
-    }
+   }
+   match /reads/{readerId} {
     allow read: if canChat();
-    allow create: if canChat() && request.resource.data.keys().hasOnly(['fromId','text','createdAt'])
+    allow create: if canChat() && validSharedRead(readerId);
+    allow update: if canChat() && validSharedRead(readerId) && request.resource.data.through >= resource.data.through;
+   }
+   match /messages/{messageId} {
+    allow read: if canChat();
+    allow create: if canChat() && request.resource.data.keys().hasOnly(['fromId','text','createdAt','replyTo'])
      && request.resource.data.fromId == request.auth.uid && request.resource.data.createdAt == request.time
-     && request.resource.data.text is string && request.resource.data.text.size()>0
-     && request.resource.data.text.size()<=2000 && request.resource.data.text.matches('(?s).*\\S.*');
+     && messageText(request.resource.data.text)
+     && validReply(/databases/$(database)/documents/contactRequests/$(requestId)/messages, messageId);
+    allow update: if canChat() && validMessageEdit();
+    allow delete: if canChat() && resource.data.fromId == request.auth.uid;
    }
    allow get: if signedIn() && (!exists(/databases/$(database)/documents/contactRequests/$(requestId)) || resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
    allow list: if signedIn() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid) && request.query.limit <= 100;
@@ -208,6 +241,11 @@ service cloud.firestore {
    function directoryPath(){return /databases/$(database)/documents/groupDirectory/$(groupId);}
    function invited() { return signedIn() && request.auth.uid in resource.data.memberIds; }
    function joined() { return signedIn() && request.auth.uid in get(/databases/$(database)/documents/privateGroups/$(groupId)).data.joinedIds; }
+   function pairMember(first, second) {
+    let members=get(/databases/$(database)/documents/privateGroups/$(groupId)).data.joinedIds;
+    return signedIn() && request.auth.uid in [first,second] && first < second
+     && first in members && second in members;
+   }
    function validGroup() {
     let d=request.resource.data;
     return d.keys().hasOnly(['name','ownerId','memberIds','joinedIds']) && nameValid(d.name) && d.name.size()<=60
@@ -256,24 +294,33 @@ service cloud.firestore {
      && request.resource.data.name==profile(memberId).fullName && request.resource.data.avatarUrl==profile(memberId).avatarUrl;
     allow delete: if own(memberId);
    }
+   match /memberChats/{first}/with/{second}/reads/{readerId} {
+    allow read: if pairMember(first, second);
+    allow create: if pairMember(first, second) && validSharedRead(readerId);
+    allow update: if pairMember(first, second) && validSharedRead(readerId) && request.resource.data.through >= resource.data.through;
+   }
    match /memberChats/{first}/with/{second}/messages/{messageId} {
-    function pairMember() {
-     let members=get(/databases/$(database)/documents/privateGroups/$(groupId)).data.joinedIds;
-     return signedIn() && request.auth.uid in [first,second] && first < second
-      && first in members && second in members;
-    }
-    allow read: if pairMember();
-    allow create: if pairMember() && request.resource.data.keys().hasOnly(['fromId','text','createdAt'])
+    allow read: if pairMember(first, second);
+    allow create: if pairMember(first, second) && request.resource.data.keys().hasOnly(['fromId','text','createdAt','replyTo'])
      && request.resource.data.fromId==request.auth.uid && request.resource.data.createdAt==request.time
-     && request.resource.data.text is string && request.resource.data.text.size()<=2000
-     && request.resource.data.text.matches('(?s).*\\S.*');
+     && messageText(request.resource.data.text)
+     && validReply(/databases/$(database)/documents/privateGroups/$(groupId)/memberChats/$(first)/with/$(second)/messages, messageId);
+    allow update: if pairMember(first, second) && validMessageEdit();
+    allow delete: if pairMember(first, second) && resource.data.fromId == request.auth.uid;
+   }
+   match /reads/{readerId} {
+    allow read: if joined();
+    allow create: if joined() && validSharedRead(readerId);
+    allow update: if joined() && validSharedRead(readerId) && request.resource.data.through >= resource.data.through;
    }
    match /messages/{messageId} {
     allow read: if joined();
-    allow create: if joined() && request.resource.data.keys().hasOnly(['fromId','senderName','text','createdAt'])
+    allow create: if joined() && request.resource.data.keys().hasOnly(['fromId','senderName','text','createdAt','replyTo'])
      && request.resource.data.fromId==request.auth.uid && request.resource.data.senderName==profile(request.auth.uid).fullName
-     && request.resource.data.createdAt==request.time && request.resource.data.text is string
-     && request.resource.data.text.size()<=2000 && request.resource.data.text.matches('(?s).*\\S.*');
+     && request.resource.data.createdAt==request.time && messageText(request.resource.data.text)
+     && validReply(/databases/$(database)/documents/privateGroups/$(groupId)/messages, messageId);
+    allow update: if joined() && validMessageEdit();
+    allow delete: if joined() && resource.data.fromId == request.auth.uid;
    }
    match /live/{memberId} {
     allow read: if joined();

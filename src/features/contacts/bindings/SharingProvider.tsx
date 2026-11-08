@@ -40,6 +40,9 @@ export function SharingProvider({ user, children }: PropsWithChildren<{ user: Au
     contacts.setNearbyVisibility(state.ready && state.preferences.nearby);
   }, [contacts, state.ready, state.preferences.nearby]);
   useEffect(() => {
+    contacts.refreshSharedUser(state.locations);
+  }, [contacts, state.locations]);
+  useEffect(() => {
     model.setPosition(mapState.live, mapState.trail, mapState.tracking === 'tracking');
   }, [model, mapState.live, mapState.trail, mapState.tracking]);
   useEffect(() => {

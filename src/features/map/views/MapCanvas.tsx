@@ -2,19 +2,21 @@ import { MapPeoplePicker } from './MapPeoplePicker';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import React, {
   memo,
+  useCallback,
   useEffect,
   useRef,
   useState,
   type ComponentType,
   type RefAttributes,
 } from 'react';
-import { Linking, StyleSheet, TurboModuleRegistry, View } from 'react-native';
+import { AppState, Linking, StyleSheet, TurboModuleRegistry, View } from 'react-native';
 import type WebView from 'react-native-webview';
 import type { WebViewProps } from 'react-native-webview';
 import { colors } from '../../../shared/theme/colors';
 import { useReducedMotion } from '../../../shared/motion/useReducedMotion';
 import { isMapAttributionLink, isMapDocument, mapDocumentBaseUrl } from '../models/mapSource';
 import { mapDocument } from '../models/mapDocument';
+import { mapConnectionError, mapResourceFailure } from '../models/mapFailure';
 import type { MapCanvasProps, MapCommand } from '../models/map';
 import { MapStatus } from './MapStatus';
 import { MapControls } from './MapControls';
@@ -105,9 +107,10 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
   ]);
   const fail = () => {
     setReady(false);
-    setError('Could not load the map. Check your connection and retry.');
+    // A later generic renderer error must not hide the actionable certificate error.
+    setError((current) => current || mapConnectionError);
   };
-  const retry = () => {
+  const retry = useCallback(() => {
     setReady(false);
     sentTrail.current = undefined;
     sentSharedTrail.current = undefined;
@@ -115,7 +118,15 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
     setInitialized(false);
     setError('');
     setAttempt((value) => value + 1);
-  };
+  }, []);
+  useEffect(() => {
+    if (!error || !Renderer) return;
+    // Retry after the user returns from fixing connectivity or date/time in Settings.
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') retry();
+    });
+    return () => subscription.remove();
+  }, [error, Renderer, retry]);
   const send = (command: MapCommand) => {
     if (initialized && !error)
       view.current?.postMessage(
@@ -142,6 +153,13 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
           scrollEnabled={false}
           bounces={false}
           onError={fail}
+          onLoadSubResourceError={({ nativeEvent }) => {
+            const failure = mapResourceFailure(nativeEvent.url, nativeEvent.code);
+            if (failure) {
+              setReady(false);
+              setError(failure);
+            }
+          }}
           onRenderProcessGone={fail}
           onContentProcessDidTerminate={fail}
           onShouldStartLoadWithRequest={(request) => {

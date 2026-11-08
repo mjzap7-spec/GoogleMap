@@ -184,6 +184,428 @@ function until(model, ready) {
     }, 7000);
   });
 }
+
+test(
+  'device-only multi-delete and clear preserve Firebase and the other device in every chat type',
+  { timeout: 60000 },
+  async (t) => {
+    const {
+      FirebaseChatRepository,
+    } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+    const {
+      DeviceChatRepository,
+    } = require('../../.test-build/features/chat/data/DeviceChatRepository');
+    const { StoredChatHistory } = require('../../.test-build/features/chat/data/StoredChatHistory');
+    const { ChatViewModel } = require('../../.test-build/features/chat/viewmodels/ChatViewModel');
+    const { threadKey } = require('../../.test-build/features/chat/models/chat');
+    await request();
+    await accept();
+    await env.withSecurityRulesDisabled(async (context) =>
+      setDoc(doc(context.firestore(), 'privateGroups', 'local-history'), {
+        name: 'Local history',
+        ownerId: 'alice',
+        memberIds: ['alice', 'bob'],
+        joinedIds: ['alice', 'bob'],
+      }),
+    );
+    const alice = db('alice'),
+      bob = db('bob');
+    const writer = new FirebaseChatRepository(() => alice),
+      remote = new FirebaseChatRepository(() => bob);
+    const disk = new Map();
+    const storage = {
+      getItem: async (key) => disk.get(key) ?? null,
+      setItem: async (key, value) => {
+        disk.set(key, value);
+      },
+    };
+    const history = new StoredChatHistory(storage);
+    const local = new DeviceChatRepository(remote, history);
+    const contexts = [
+      [
+        { peerId: 'bob', requestId: 'alice_bob' },
+        { peerId: 'alice', requestId: 'alice_bob' },
+        ['contactRequests', 'alice_bob'],
+      ],
+      [
+        { groupId: 'local-history', senderName: 'Alice' },
+        { groupId: 'local-history', senderName: 'Bob' },
+        ['privateGroups', 'local-history'],
+      ],
+      [
+        { groupId: 'local-history', memberId: 'bob' },
+        { groupId: 'local-history', memberId: 'alice' },
+        ['privateGroups', 'local-history', 'memberChats', 'alice', 'with', 'bob'],
+      ],
+    ];
+    for (const [toBob, toAlice, parent] of contexts) {
+      const device = new ChatViewModel(local, 'bob', toAlice, history);
+      const otherDevice = new ChatViewModel(remote, 'bob', toAlice);
+      device.start();
+      otherDevice.start();
+      t.after(device.stop);
+      t.after(otherDevice.stop);
+      await writer.send('alice', toBob, 'Original');
+      await until(device, (s) => s.messages.some((m) => m.text === 'Original' && m.createdAt));
+      const original = device.getSnapshot().messages[0];
+      await remote.send('bob', toAlice, 'Reply', original.id);
+      await writer.send('alice', toBob, 'Newest');
+      await until(
+        device,
+        (s) =>
+          s.messages.length === 3 && s.messages[0].text === 'Newest' && s.messages[0].createdAt,
+      );
+      const newest = device.getSnapshot().messages[0];
+      const readStored = async () =>
+        (await getDocs(collection(alice, ...parent, 'messages'))).docs.map((d) => [d.id, d.data()]);
+      const before = await readStored();
+      assert.equal(await device.deleteLocal([original.id, newest.id]), true);
+      await until(device, (s) => s.messages.length === 1 && s.messages[0].reply?.unavailable);
+      await until(
+        otherDevice,
+        (s) => s.messages.length === 3 && s.messages.some((m) => m.reply?.text === 'Original'),
+      );
+      assert.deepEqual(await readStored(), before);
+      const selectionIds = () =>
+        new Promise((resolve, reject) => {
+          const stop = local.messageIds(
+            'bob',
+            toAlice,
+            (ids) => {
+              stop();
+              resolve(ids);
+            },
+            reject,
+          );
+        });
+      assert.deepEqual(
+        await selectionIds(),
+        device.getSnapshot().messages.map((m) => m.id),
+      );
+      let unread;
+      const badge = {
+        getSnapshot: () => unread,
+        subscribe: (notify) =>
+          local.unread(
+            'bob',
+            toAlice,
+            undefined,
+            (value) => {
+              unread = value;
+              notify();
+            },
+            () => {},
+          ),
+      };
+      await until(badge, (count) => count === 0);
+      if ('peerId' in toAlice) {
+        let previews;
+        const list = {
+          getSnapshot: () => previews,
+          subscribe: (notify) =>
+            local.inbox(
+              'bob',
+              (value) => {
+                previews = value;
+                notify();
+              },
+              () => {},
+            ),
+        };
+        await until(list, (rows) => rows?.length === 0);
+      }
+      const target = device.prepareClear();
+      // A new arrival while the confirmation is open must survive the clear.
+      await writer.send('alice', toBob, 'New arrival');
+      await until(device, (s) => s.messages.some((m) => m.text === 'New arrival' && m.createdAt));
+      const beforeClear = await readStored();
+      await device.clearLocal(target);
+      await until(device, (s) => s.messages.length === 1 && s.messages[0].text === 'New arrival');
+      unread = undefined;
+      await until(badge, (count) => count === 1);
+      assert.deepEqual(await readStored(), beforeClear);
+      await until(otherDevice, (s) => s.messages.length === 4);
+      const reopened = new ChatViewModel(
+        new DeviceChatRepository(remote, new StoredChatHistory(storage)),
+        'bob',
+        toAlice,
+      );
+      reopened.start();
+      t.after(reopened.stop);
+      await until(
+        reopened,
+        (s) => !s.loading && s.messages.length === 1 && s.messages[0].text === 'New arrival',
+      );
+      // A clear cutoff hides unloaded older history without downloading every old message.
+      const cutoff = device.prepareClear();
+      await history.clear('bob', threadKey(toAlice), cutoff.through, cutoff.ids);
+      await until(device, (s) => !s.loading && s.messages.length === 0 && !s.more);
+      assert.equal((await readStored()).length, 4);
+      assert.deepEqual(await selectionIds(), []);
+      device.stop();
+      otherDevice.stop();
+      reopened.stop();
+    }
+  },
+);
+
+test(
+  'reply, edit and delete sync for all chat types with author-only mutations and live quotes',
+  { timeout: 60000 },
+  async (t) => {
+    const {
+      FirebaseChatRepository,
+    } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+    const { ChatViewModel } = require('../../.test-build/features/chat/viewmodels/ChatViewModel');
+    await request();
+    await accept();
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'privateGroups', 'actions'), {
+        name: 'Actions',
+        ownerId: 'alice',
+        memberIds: ['alice', 'bob', 'eve'],
+        joinedIds: ['alice', 'bob'],
+      });
+    });
+    const alice = db('alice'),
+      bob = db('bob'),
+      eve = db('eve');
+    const writer = new FirebaseChatRepository(() => alice),
+      reader = new FirebaseChatRepository(() => bob);
+    const contexts = [
+      [
+        { peerId: 'bob', requestId: 'alice_bob' },
+        { peerId: 'alice', requestId: 'alice_bob' },
+        ['contactRequests', 'alice_bob'],
+      ],
+      [
+        { groupId: 'actions', senderName: 'Alice' },
+        { groupId: 'actions', senderName: 'Bob' },
+        ['privateGroups', 'actions'],
+      ],
+      [
+        { groupId: 'actions', memberId: 'bob' },
+        { groupId: 'actions', memberId: 'alice' },
+        ['privateGroups', 'actions', 'memberChats', 'alice', 'with', 'bob'],
+      ],
+    ];
+    for (const [toBob, toAlice, parent] of contexts) {
+      const model = new ChatViewModel(reader, 'bob', toAlice);
+      const inbox = new ChatViewModel(reader, 'bob');
+      model.start();
+      inbox.start();
+      t.after(model.stop);
+      t.after(inbox.stop);
+      await writer.send('alice', toBob, 'Original');
+      await until(model, (s) => s.messages.some((m) => m.text === 'Original' && m.createdAt));
+      const first = model.getSnapshot().messages.find((m) => m.text === 'Original');
+      const original = doc(alice, ...parent, 'messages', first.id);
+      await reader.send('bob', toAlice, 'Reply', first.id);
+      await until(model, (s) =>
+        s.messages.some((m) => m.text === 'Reply' && m.reply?.text === 'Original'),
+      );
+      await assertFails(
+        updateDoc(doc(bob, ...parent, 'messages', first.id), {
+          text: 'forged',
+          editedAt: serverTimestamp(),
+        }),
+      );
+      await assertFails(deleteDoc(doc(bob, ...parent, 'messages', first.id)));
+      await assertFails(deleteDoc(doc(eve, ...parent, 'messages', first.id)));
+      await assertFails(writer.send('alice', toBob, 'Bad reference', 'missing'));
+      await assertFails(writer.send('alice', toBob, 'Bad path', 'invalid/path'));
+      await assertFails(updateDoc(original, { text: ' ', editedAt: serverTimestamp() }));
+      await assertFails(
+        updateDoc(original, {
+          text: 'edited',
+          createdAt: serverTimestamp(),
+          editedAt: serverTimestamp(),
+        }),
+      );
+      await assertFails(updateDoc(original, { fromId: 'bob', editedAt: serverTimestamp() }));
+      await writer.edit('alice', toBob, first.id, 'Corrected');
+      await until(model, (s) =>
+        s.messages.some((m) => m.text === 'Reply' && m.reply?.text === 'Corrected'),
+      );
+      assert.equal(model.getSnapshot().messages.find((m) => m.id === first.id).time, first.time);
+      assert.equal(model.getSnapshot().messages.find((m) => m.id === first.id).edited, true);
+      await writer.send('alice', toBob, 'Newest');
+      await until(model, (s) => s.messages.some((m) => m.text === 'Newest' && m.createdAt));
+      const newest = model.getSnapshot().messages.find((m) => m.text === 'Newest');
+      // A narrow window exercises quotes whose originals have scrolled out of the transcript.
+      let narrow = [];
+      const narrowModel = {
+        getSnapshot: () => narrow,
+        subscribe: (notify) => {
+          return reader.messages(
+            'bob',
+            toAlice,
+            2,
+            (rows) => {
+              narrow = rows;
+              notify();
+            },
+            () => {},
+          );
+        },
+      };
+      await until(narrowModel, (rows) =>
+        rows.some((m) => m.text === 'Reply' && m.reply?.text === 'Corrected'),
+      );
+      await writer.remove('alice', toBob, first.id);
+      await until(
+        model,
+        (s) =>
+          !s.messages.some((m) => m.id === first.id) &&
+          s.messages.some((m) => m.reply?.unavailable),
+      );
+      await writer.edit('alice', toBob, newest.id, 'Latest edit');
+      await until(model, (s) =>
+        s.messages.some((m) => m.id === newest.id && m.text === 'Latest edit'),
+      );
+      if ('peerId' in toBob) {
+        await until(inbox, (s) => s.previews.some((p) => p.text === 'Latest edit'));
+        assert.equal(inbox.getSnapshot().previews[0].time, newest.time);
+      }
+      let unread = -1;
+      const countModel = {
+        getSnapshot: () => unread,
+        subscribe: (notify) =>
+          reader.unread(
+            'bob',
+            toAlice,
+            undefined,
+            (count) => {
+              unread = count;
+              notify();
+            },
+            () => {},
+          ),
+      };
+      await until(countModel, (count) => count === 1);
+      await writer.remove('alice', toBob, newest.id);
+      await until(model, (s) => !s.messages.some((m) => m.id === newest.id));
+      unread = -1;
+      await until(countModel, (count) => count === 0);
+      if ('peerId' in toBob) await until(inbox, (s) => s.previews.some((p) => p.text === ''));
+      await assert.rejects(writer.edit('alice', toBob, first.id, 'resurrect'), /unavailable/);
+      model.stop();
+      inbox.stop();
+    }
+  },
+);
+
+test(
+  'sent checks become read in realtime for direct, group and private-member chats with participant-only receipts',
+  { timeout: 30000 },
+  async (t) => {
+    const {
+      FirebaseChatRepository,
+    } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+    const { ChatViewModel } = require('../../.test-build/features/chat/viewmodels/ChatViewModel');
+    const { messageStatus } = require('../../.test-build/features/chat/models/messageStatus');
+    const alice = db('alice'),
+      bob = db('bob'),
+      eve = db('eve');
+    await request();
+    await accept();
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'privateGroups', 'checks'), {
+        name: 'Checks',
+        ownerId: 'alice',
+        memberIds: ['alice', 'bob', 'eve'],
+        joinedIds: ['alice', 'bob'],
+      });
+    });
+    const contexts = [
+      [
+        { peerId: 'bob', requestId: 'alice_bob' },
+        { peerId: 'alice', requestId: 'alice_bob' },
+        ['contactRequests', 'alice_bob'],
+      ],
+      [
+        { groupId: 'checks', senderName: 'Alice' },
+        { groupId: 'checks', senderName: 'Bob' },
+        ['privateGroups', 'checks'],
+      ],
+      [
+        { groupId: 'checks', memberId: 'bob' },
+        { groupId: 'checks', memberId: 'alice' },
+        ['privateGroups', 'checks', 'memberChats', 'alice', 'with', 'bob'],
+      ],
+    ];
+    const writer = new FirebaseChatRepository(() => alice),
+      reader = new FirebaseChatRepository(() => bob);
+    for (const [toBob, toAlice, path] of contexts) {
+      const sender = new ChatViewModel(writer, 'alice', toBob),
+        recipient = new ChatViewModel(reader, 'bob', toAlice);
+      t.after(sender.stop);
+      t.after(recipient.stop);
+      sender.start();
+      recipient.start();
+      await writer.send('alice', toBob, 'First');
+      await until(sender, (s) =>
+        s.messages.some((m) => m.text === 'First' && !m.pending && m.createdAt),
+      );
+      const first = sender.getSnapshot().messages[0];
+      assert.equal(messageStatus(first, sender.getSnapshot().readThrough), 'sent');
+      // Reading one's own message must never count as the recipient reading it.
+      await writer.shareRead('alice', toBob, first.createdAt);
+      assert.equal(messageStatus(first, sender.getSnapshot().readThrough), 'sent');
+      await until(recipient, (s) => s.messages.some((m) => m.id === first.id && m.createdAt));
+      recipient.markVisibleRead(first.createdAt);
+      await until(sender, (s) => messageStatus(first, s.readThrough) === 'read');
+      await writer.send('alice', toBob, 'Second');
+      await until(sender, (s) =>
+        s.messages.some((m) => m.text === 'Second' && m.createdAt && !m.pending),
+      );
+      const second = sender.getSnapshot().messages.find((m) => m.text === 'Second');
+      assert.equal(messageStatus(second, sender.getSnapshot().readThrough), 'sent');
+      recipient.markVisibleRead(second.createdAt);
+      await until(sender, (s) => messageStatus(second, s.readThrough) === 'read');
+      const receipt = doc(bob, ...path, 'reads', 'bob');
+      await assertSucceeds(getDoc(doc(alice, ...path, 'reads', 'bob')));
+      await assertFails(getDocs(collection(eve, ...path, 'reads')));
+      await assertFails(setDoc(doc(alice, ...path, 'reads', 'bob'), { through: second.createdAt }));
+      await assertFails(setDoc(receipt, { through: Timestamp.fromMillis(Date.now() + 86400000) }));
+      await assertFails(setDoc(receipt, { through: first.createdAt }));
+      await assertFails(deleteDoc(receipt));
+      await assertSucceeds(reader.shareRead('bob', toAlice, first.createdAt));
+      assert.equal(messageStatus(second, sender.getSnapshot().readThrough), 'read');
+      sender.stop();
+      recipient.stop();
+    }
+    // The private unread-badge records remain private even between contacts.
+    await assertFails(getDocs(collection(alice, 'users', 'bob', 'chatReads')));
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'privateGroups', 'checks'), {
+        joinedIds: ['alice', 'bob', 'eve'],
+      });
+    });
+    await assertSucceeds(getDocs(collection(eve, 'privateGroups', 'checks', 'reads')));
+    await assertFails(
+      getDocs(
+        collection(eve, 'privateGroups', 'checks', 'memberChats', 'alice', 'with', 'bob', 'reads'),
+      ),
+    );
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'privateGroups', 'checks'), {
+        joinedIds: ['alice', 'eve'],
+      });
+    });
+    await assertFails(getDocs(collection(bob, 'privateGroups', 'checks', 'reads')));
+    await assertFails(
+      getDocs(
+        collection(eve, 'privateGroups', 'checks', 'memberChats', 'alice', 'with', 'bob', 'reads'),
+      ),
+    );
+    const remove = writeBatch(alice);
+    remove.delete(doc(alice, 'users', 'alice', 'contacts', 'bob'));
+    remove.delete(doc(alice, 'users', 'bob', 'contacts', 'alice'));
+    await remove.commit();
+    await assertFails(getDocs(collection(bob, 'contactRequests', 'alice_bob', 'reads')));
+  },
+);
 test(
   'unread badges count incoming direct, group and member messages and sync the read boundary across devices',
   { timeout: 25000 },
@@ -950,6 +1372,9 @@ test('sharing preferences disable nearby publishing and require opt-in for ordin
   assert.equal((await getDoc(live)).exists(), false);
   assert.equal((await getDoc(trip)).data().trip, true);
   await assertFails(setDoc(live, location));
+  await assertSucceeds(repository.savePreferences('alice', { nearby: false, groups: false }, true));
+  assert.equal((await getDoc(trip)).exists(), false, 'Stop all sharing removes active trips too');
+  assert.equal((await getDoc(doc(database, 'sharedLocations', 'alice'))).exists(), false);
 });
 
 test(

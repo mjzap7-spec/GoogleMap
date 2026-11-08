@@ -85,6 +85,10 @@ function shared(
     latitude: data.latitude,
     longitude: data.longitude,
     expiresAt: clock.localDeadline((data.bucket + 2) * 120000),
+    updatedAt:
+      typeof data.updatedAt?.toMillis === 'function'
+        ? clock.localDeadline(data.updatedAt.toMillis())
+        : undefined,
   };
 }
 export class FirebaseContactRepository implements ContactRepository {

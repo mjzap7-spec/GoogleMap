@@ -82,7 +82,7 @@ export class FirebaseSharingRepository implements SharingRepository {
       stop();
     };
   }
-  async savePreferences(userId: string, preferences: SharingPreferences) {
+  async savePreferences(userId: string, preferences: SharingPreferences, stopTrips = false) {
     const value = sharingAudience(preferences);
     const db = this.database(userId);
     const batch = writeBatch(db);
@@ -101,7 +101,8 @@ export class FirebaseSharingRepository implements SharingRepository {
           );
           if (preferences.data()?.groups === true) return;
           const location = await transaction.get(ref);
-          if (location.exists() && location.data().trip !== true) transaction.delete(ref);
+          if (location.exists() && (stopTrips || location.data().trip !== true))
+            transaction.delete(ref);
         });
       }
     }
@@ -275,6 +276,7 @@ export class FirebaseSharingRepository implements SharingRepository {
                   trip: data.trip === true,
                   trail: parseSharedTrail(data.trail),
                   expiresAt: this.clock.localDeadline((data.updatedAt?.toMillis() ?? 0) + 120000),
+                  updatedAt: this.clock.localDeadline(data.updatedAt.toMillis()),
                 } as GroupLocation;
               }),
           );

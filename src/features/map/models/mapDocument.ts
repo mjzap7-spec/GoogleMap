@@ -148,6 +148,7 @@ function people(){
  (state.users||[]).forEach(function(user){
   if(user.expiresAt<=now)return;
   nextPeopleExpiry=Math.min(nextPeopleExpiry,user.expiresAt);
+  if(Number.isFinite(user.updatedAt) && user.updatedAt+60000>now)nextPeopleExpiry=Math.min(nextPeopleExpiry,user.updatedAt+60000);
   var pixel=map.project?map.project([user.longitude,user.latitude]):null;
   if(pixel && container && (pixel.x < -48 || pixel.y < -48 || pixel.x > container.clientWidth+48 || pixel.y > container.clientHeight+48))return;
   visible.push({user:user,pixel:pixel});
@@ -177,6 +178,9 @@ function people(){
   entry.avatar.style.width=(cluster?group.users.length>=100?48:40:size)+'px';entry.avatar.style.height=(cluster?34:size)+'px';
   entry.avatar.style.borderRadius=cluster?'10px':'50%';entry.avatar.style.backgroundColor=cluster?'#39324f':detail<0.1?'#bcb5ff':'#252936';
   entry.avatar.style.borderColor=cluster?'#d0caff':detail<0.1?'#efecff':'#bcb5ff';entry.avatar.style.borderWidth=cluster?'2px':size<20?'2px':'3px';
+  var stale=!cluster && Number.isFinite(user.updatedAt) && now-user.updatedAt>=60000;
+  entry.avatar.style.opacity=stale?'0.65':'1';
+  if(stale)entry.avatar.style.borderColor='#a3a4af';
   entry.initial.style.opacity=cluster?'1':String(detail);
   var labelAllowed=!cluster && zoom>=17 && labelCount<8 && (!group.pixel || !labelPositions.some(function(pixel){return Math.abs(pixel.x-group.pixel.x)<140 && Math.abs(pixel.y-group.pixel.y)<64;}));
   if(labelAllowed){labelCount++;if(group.pixel)labelPositions.push(group.pixel);}

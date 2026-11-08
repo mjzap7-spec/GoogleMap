@@ -396,6 +396,33 @@ test('nearby avatar labels are text-safe and contact selection focuses without r
   assert.equal(marker.removed, true);
 });
 
+test('older locations fade and recover on the same marker when a fresh update arrives', () => {
+  const f = fixture();
+  const now = Date.now();
+  const user = {
+    id: 'friend',
+    nickname: 'Friend',
+    avatarUrl: null,
+    latitude: 28.5,
+    longitude: -81.3,
+    expiresAt: now + 60000,
+    updatedAt: now - 61000,
+  };
+  f.send({ type: 'state', language: 'en', users: [user] });
+  const marker = f.markers.find((item) => item.options.element);
+  const avatar = marker.options.element.children[0];
+  assert.equal(avatar.style.opacity, '0.65');
+  f.send({ type: 'state', language: 'en', users: [{ ...user, updatedAt: now }] });
+  assert.equal(avatar.style.opacity, '1');
+  assert.equal(
+    f.markers.filter((item) => item.options.element).length,
+    1,
+    'refresh reuses the avatar',
+  );
+  f.send({ type: 'state', language: 'en', users: [{ ...user, expiresAt: now - 1 }] });
+  assert.equal(marker.removed, true);
+});
+
 test('style downloads alongside the engine and failed prefetch falls back to the provider URL', async () => {
   let finish;
   let requests = 0;

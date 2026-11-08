@@ -102,6 +102,30 @@ test('each outgoing contact request confirms once across screens, including requ
   assert.deepEqual(requests, ['friend@example.com', 'another-friend']);
   assert.deepEqual(confirmations, ['Contact request sent.', 'Contact request sent.']);
 });
+test('an open group person card follows new fixes and becomes unavailable when access is removed', (t) => {
+  const model = new ContactsViewModel(repository(), 'me');
+  t.after(model.dispose);
+  model.setShowNearby(true);
+  const original = {
+    id: 'friend',
+    groupId: 'family',
+    nickname: 'Friend',
+    ...point,
+    expiresAt: Date.now() + 60000,
+    updatedAt: Date.now() - 30000,
+  };
+  model.selectSharedUser(original);
+  const changed = { ...original, updatedAt: Date.now(), latitude: point.latitude + 0.001 };
+  model.refreshSharedUser([changed]);
+  assert.equal(model.getSnapshot().selectedUser.updatedAt, changed.updatedAt);
+  assert.equal(model.getSnapshot().selectedUser.latitude, changed.latitude);
+  model.refreshSharedUser([]);
+  assert.equal(model.getSnapshot().selectedUser.expiresAt, 0);
+  model.closeMapUser();
+  model.refreshSharedUser([changed]);
+  assert.equal(model.getSnapshot().selectedUser, null, 'a new fix never reopens a dismissed card');
+});
+
 test('requests notify once and only confirmed responses remove a pending request', async () => {
   let notify;
   let fail = true;

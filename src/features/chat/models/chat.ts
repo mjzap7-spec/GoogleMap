@@ -1,3 +1,5 @@
+import type { LocalThreadHistory } from './localChatHistory';
+
 export interface ChatMessage {
   id: string;
   fromId: string;
@@ -6,8 +8,21 @@ export interface ChatMessage {
   pending: boolean;
   createdAt?: ReadTime;
   senderName?: string;
+  edited?: boolean;
+  replyTo?: string;
+  reply?: MessageReply;
+}
+/** Quotes contain live data from this conversation, never a copied message body. */
+export interface MessageReply {
+  id: string;
+  fromId?: string;
+  senderName?: string;
+  text?: string;
+  unavailable?: boolean;
 }
 export interface ChatPreview {
+  messageId?: string;
+  createdAt?: ReadTime;
   peerId: string;
   requestId: string;
   text: string;
@@ -36,6 +51,21 @@ export interface MemberCard {
   avatarUrl: string | null;
 }
 export interface ChatRepository {
+  /** IDs only for explicit Select all; does not hydrate message bodies or reply listeners. */
+  messageIds(
+    uid: string,
+    peer: ChatPeer,
+    next: (ids: string[]) => void,
+    fail: () => void,
+    history?: LocalThreadHistory,
+  ): () => void;
+  readByOthers(
+    uid: string,
+    peer: ChatPeer,
+    next: (through: ReadTime | undefined) => void,
+    fail: () => void,
+  ): () => void;
+  shareRead(uid: string, peer: ChatPeer, through: ReadTime): Promise<void>;
   receipts(uid: string, next: (rows: Map<string, ReadTime>) => void, fail: () => void): () => void;
   unread(
     uid: string,
@@ -43,6 +73,7 @@ export interface ChatRepository {
     after: ReadTime | undefined,
     next: (count: number) => void,
     fail: () => void,
+    history?: LocalThreadHistory,
   ): () => void;
   markRead(uid: string, peer: ChatPeer, through: ReadTime): Promise<void>;
   members(
@@ -58,6 +89,9 @@ export interface ChatRepository {
     count: number,
     next: (rows: ChatMessage[]) => void,
     fail: () => void,
+    history?: LocalThreadHistory,
   ): () => void;
-  send(uid: string, peer: ChatPeer, text: string): Promise<void>;
+  send(uid: string, peer: ChatPeer, text: string, replyTo?: string): Promise<void>;
+  edit(uid: string, peer: ChatPeer, messageId: string, text: string): Promise<void>;
+  remove(uid: string, peer: ChatPeer, messageId: string): Promise<void>;
 }

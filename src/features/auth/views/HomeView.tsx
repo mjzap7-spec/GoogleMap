@@ -8,6 +8,7 @@ import {
   Text,
   View,
   Switch,
+  ScrollView,
   useWindowDimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +21,7 @@ import { ContactsPanel, type ContactsPanelProps } from '../../contacts/views/Con
 import { MapCanvas } from '../../map/views/MapCanvas';
 import { MapPeoplePicker } from '../../map/views/MapPeoplePicker';
 import type { MapCanvasProps, MapUserMarker } from '../../map/models/map';
+import type { MapPeopleFilter } from '../../map/models/mapPeople';
 
 export function HomeView({
   testCount = 0,
@@ -30,6 +32,8 @@ export function HomeView({
   error,
   contacts,
   map,
+  peopleFilter,
+  onPeopleFilter,
 }: {
   testCount?: number;
   onStopTesting?: () => void;
@@ -39,6 +43,8 @@ export function HomeView({
   error: string;
   contacts: ContactsPanelProps;
   map: MapCanvasProps;
+  peopleFilter: MapPeopleFilter;
+  onPeopleFilter: (value: MapPeopleFilter) => void;
 }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -126,10 +132,12 @@ export function HomeView({
               accessible={false}
               style={[styles.presenceDot, contacts.state.showNearby && styles.presenceOn]}
             />
-            <Text style={styles.nearbyText}>{t('Show Nearby Users')}</Text>
+            <Text style={styles.nearbyText}>{t('Show people')}</Text>
             <Switch
-              accessibilityLabel={t('Show Nearby Users')}
-              accessibilityHint={t('Show signed-in users within 1 km.')}
+              accessibilityLabel={t('Show people')}
+              accessibilityHint={t(
+                'Show people who share with you. This does not share your location.',
+              )}
               thumbColor={contacts.state.showNearby ? colors.accent : colors.muted}
               value={contacts.state.showNearby}
               onValueChange={contacts.commands.setShowNearby}
@@ -138,6 +146,49 @@ export function HomeView({
           </View>
           {trips.length > 0 && <LiveTripButton trips={trips} onFollow={onFollowTrip} />}
         </View>
+        {contacts.state.showNearby && !testCount && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filters}
+            contentContainerStyle={styles.filterContent}
+          >
+            {(['all', 'contacts', 'groups', 'nearby'] as const).map((value) => (
+              <Pressable
+                key={value}
+                accessibilityRole="button"
+                accessibilityState={{ selected: value === peopleFilter }}
+                accessibilityLabel={t(
+                  value === 'all'
+                    ? 'All people'
+                    : value === 'contacts'
+                      ? 'Contacts on map'
+                      : value === 'groups'
+                        ? 'Group members on map'
+                        : 'Nearby users on map',
+                )}
+                onPress={() => onPeopleFilter(value)}
+                style={({ pressed }) => [
+                  styles.filter,
+                  value === peopleFilter && styles.activePill,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.nearbyText}>
+                  {t(
+                    value === 'all'
+                      ? 'All'
+                      : value === 'contacts'
+                        ? 'Contacts'
+                        : value === 'groups'
+                          ? 'Groups'
+                          : 'Nearby',
+                  )}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
         {nearbyFailed && (
           <Pressable
             accessibilityRole="button"
@@ -251,6 +302,17 @@ function LiveTripButton({
   );
 }
 const styles = StyleSheet.create({
+  filters: { flexGrow: 0, marginTop: 8, maxHeight: 44 },
+  filterContent: { gap: 6 },
+  filter: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    borderRadius: 20,
+    backgroundColor: colors.input,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   tripBanner: {
     flexDirection: 'row',
     alignItems: 'center',

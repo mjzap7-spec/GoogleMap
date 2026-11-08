@@ -213,6 +213,15 @@ export class ContactsViewModel extends NoticeViewModel<ContactsState> {
   closeMapUser = () => {
     if (!this.state.mapRequestBusy) this.update({ selectedUser: null, mapRequestError: '' });
   };
+  refreshSharedUser = (locations: readonly SharedMapUser[]) => {
+    const selected = this.state.selectedUser;
+    if (!selected?.groupId) return;
+    const current = locations.find(
+      (row) => row.id === selected.id && row.groupId === selected.groupId,
+    );
+    if (current) this.update({ selectedUser: current });
+    else if (selected.expiresAt !== 0) this.update({ selectedUser: { ...selected, expiresAt: 0 } });
+  };
   requestSelectedUser = async () => {
     const user = this.state.selectedUser;
     if (
@@ -577,7 +586,8 @@ function sameMapUsers(first: readonly SharedMapUser[], second: readonly SharedMa
         user.avatarUrl === other.avatarUrl &&
         user.latitude === other.latitude &&
         user.longitude === other.longitude &&
-        user.expiresAt === other.expiresAt
+        user.expiresAt === other.expiresAt &&
+        user.updatedAt === other.updatedAt
       );
     })
   );

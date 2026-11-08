@@ -1,31 +1,169 @@
-import React, { memo, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import { View, Text, FlatList, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  Animated,
+  View,
+  Text,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  StyleSheet,
+  Keyboard,
+  Platform,
+  BackHandler,
+} from 'react-native';
 import { colors } from '../../../shared/theme/colors';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
-import type { ChatViewModel } from '../viewmodels/ChatViewModel';
-import type { ChatMessage, ReadTime } from '../models/chat';
+import type { ChatViewModel, ClearChatTarget } from '../viewmodels/ChatViewModel';
+import type { ChatMessage, MessageReply, ReadTime } from '../models/chat';
 import { MessageComposer } from './MessageComposer';
+import { continuesMessageRun } from '../models/messageLayout';
+import { useMessageArrival, useChatProgress } from './chatMotion';
+import { messageStatus, type MessageStatus } from '../models/messageStatus';
+import { MessageChecks } from './MessageChecks';
+import { ReplyPreview } from './ReplyPreview';
+import { Feedback } from '../../../shared/ui/Feedback';
+import { ChatHistorySheet } from './ChatHistorySheet';
+import { MessageSelectionBar } from './MessageSelectionBar';
+import { useLayoutMotion } from '../../../shared/motion/useLayoutMotion';
+import { SelectionCheck } from './SelectionCheck';
 const readVisibility = { viewAreaCoveragePercentThreshold: 50, minimumViewTime: 250 };
+const scrollAnchor = { minIndexForVisible: 0, autoscrollToTopThreshold: 36 };
 export function MessagePane({
   uid,
   state,
   commands,
   groupRoom,
   onRead,
+  peerName,
+  optionsRequest = 0,
 }: {
   uid: string;
   groupRoom: boolean;
   onRead?: (through: ReadTime) => void;
+  peerName: string;
+  optionsRequest?: number;
   state: ReturnType<ChatViewModel['getSnapshot']>;
-  commands: Pick<ChatViewModel, 'start' | 'older' | 'send' | 'setDraft'>;
+  commands: Pick<
+    ChatViewModel,
+    | 'start'
+    | 'older'
+    | 'send'
+    | 'setDraft'
+    | 'reply'
+    | 'edit'
+    | 'cancelAction'
+    | 'beginSelection'
+    | 'toggleSelection'
+    | 'selectAll'
+    | 'cancelSelection'
+    | 'deleteLocal'
+    | 'clearLocal'
+    | 'prepareClear'
+  >;
 }) {
   const { t } = useTranslation();
+  const [composerHeight, setComposerHeight] = useState(68);
+  const [historySheet, setHistorySheet] = useState<{
+    mode: 'options' | 'clear';
+    target?: ClearChatTarget;
+  }>();
+  const animateLayout = useLayoutMotion();
+  const [handledOptions, setHandledOptions] = useState(0);
+  if (optionsRequest !== handledOptions) {
+    setHandledOptions(optionsRequest);
+    if (optionsRequest) setHistorySheet({ mode: 'options' });
+  }
+  useEffect(() => {
+    if (!state.selecting) return;
+    const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      animateLayout();
+      commands.cancelSelection();
+      return true;
+    });
+    return () => back.remove();
+  }, [state.selecting, commands, animateLayout]);
+  const beginSelection = useCallback(
+    (id?: string) => {
+      Keyboard.dismiss();
+      animateLayout();
+      commands.beginSelection(id);
+    },
+    [animateLayout, commands],
+  );
+  const selected =
+    state.selectedIds.length === 1
+      ? state.messages.find((message) => message.id === state.selectedIds[0])
+      : undefined;
+  const toggleSelection = useCallback(
+    (id: string) => {
+      animateLayout();
+      commands.toggleSelection(id);
+    },
+    [animateLayout, commands],
+  );
+  const busy = state.localBusy || !!state.deletingId;
+  const context = state.editing
+    ? { label: t('Editing message'), text: state.editing.text }
+    : state.replying
+      ? {
+          label: t('Replying to {name}', {
+            name: state.replying.fromId === uid ? t('You') : state.replying.senderName || peerName,
+          }),
+          text: state.replying.text,
+        }
+      : undefined;
+  const error = state.error || state.receiptError;
   return (
-    <>
-      {!!state.error && (
+    <View style={[s.pane, { paddingBottom: state.selecting ? 0 : composerHeight }]}>
+      <Feedback source="chat-message-action" error={state.actionError} />
+      {state.selecting && (
+        <MessageSelectionBar
+          count={state.selectedIds.length}
+          busy={busy}
+          selectingAll={state.selectingAll}
+          allSelected={state.allSelected}
+          onCancel={() => {
+            animateLayout();
+            commands.cancelSelection();
+          }}
+          onSelectAll={() => {
+            if (state.allSelected || state.selectingAll) animateLayout();
+            commands.selectAll();
+          }}
+          onReply={
+            selected && !selected.pending
+              ? () => {
+                  animateLayout();
+                  commands.reply(selected.id);
+                }
+              : undefined
+          }
+          onEdit={
+            selected && !selected.pending && selected.fromId === uid
+              ? () => {
+                  animateLayout();
+                  commands.edit(selected.id);
+                }
+              : undefined
+          }
+          onDelete={() => {
+            animateLayout();
+            void commands.deleteLocal(state.selectedIds);
+          }}
+        />
+      )}
+      {!!error && (
         <View style={s.errorRow}>
           <Text accessibilityRole="alert" style={s.error}>
-            {t(state.error)}
+            {t(error)}
           </Text>
           {state.error !== 'Message could not be sent. Try again.' && (
             <Pressable style={s.link} accessibilityRole="button" onPress={commands.start}>
@@ -38,47 +176,108 @@ export function MessagePane({
         <View style={s.empty}>
           {state.loading ? (
             <ActivityIndicator color={colors.accent} />
-          ) : groupRoom ? (
+          ) : (
             <>
-              <Text style={s.emptyHeading}>{t('Group chat')}</Text>
-              <Text style={s.muted}>{t('Everyone in this group can read messages here.')}</Text>
+              <Text style={s.emptyHeading}>{t('No messages here yet')}</Text>
+              {state.more && (
+                <Pressable accessibilityRole="button" style={s.link} onPress={commands.older}>
+                  <Text style={s.accent}>{t('Earlier messages')}</Text>
+                </Pressable>
+              )}
             </>
-          ) : null}
+          )}
         </View>
       ) : (
         <MessageTimeline
           uid={uid}
           messages={state.messages}
-          loading={state.loading}
+          readThrough={state.readThrough}
+          loading={state.loading || state.selectingAll}
           more={state.more}
           onOlder={commands.older}
           onRead={onRead}
+          onActions={beginSelection}
+          actionsDisabled={state.sending || busy}
+          selecting={state.selecting}
+          selectedIds={state.selectedIds}
+          onToggle={toggleSelection}
+          peerName={groupRoom ? t('Group member') : peerName}
         />
       )}
-      <MessageComposer
-        draft={state.draft}
-        sending={state.sending}
-        groupRoom={groupRoom}
-        onChangeText={commands.setDraft}
-        onSend={commands.send}
-      />
-    </>
+      {!state.selecting && (
+        <MessageComposer
+          height={composerHeight}
+          onHeightChange={setComposerHeight}
+          draft={state.draft}
+          sending={state.sending || state.localBusy}
+          groupRoom={groupRoom}
+          onChangeText={commands.setDraft}
+          onSend={commands.send}
+          context={context}
+          actionKey={
+            state.editing
+              ? 'edit:' + state.editing.id
+              : state.replying
+                ? 'reply:' + state.replying.id
+                : undefined
+          }
+          editing={!!state.editing}
+          onCancelAction={commands.cancelAction}
+        />
+      )}
+      {historySheet && (
+        <ChatHistorySheet
+          mode={historySheet.mode}
+          busy={busy}
+          error={state.actionError}
+          onClose={() => setHistorySheet(undefined)}
+          onSelect={() => beginSelection()}
+          onClear={() => {
+            animateLayout();
+            setHistorySheet({ mode: 'clear', target: commands.prepareClear() });
+          }}
+          onConfirm={() => {
+            if (historySheet.mode !== 'clear' || !historySheet.target) return;
+            void commands.clearLocal(historySheet.target).then((saved) => {
+              if (saved) {
+                animateLayout();
+                setHistorySheet(undefined);
+              }
+            });
+          }}
+        />
+      )}
+    </View>
   );
 }
 const MessageTimeline = memo(function MessageTimeline({
   uid,
   messages,
+  readThrough,
   loading,
   more,
   onOlder,
   onRead,
+  onActions,
+  actionsDisabled,
+  peerName,
+  selecting,
+  selectedIds,
+  onToggle,
 }: {
   uid: string;
   messages: ReturnType<ChatViewModel['getSnapshot']>['messages'];
+  readThrough?: ReadTime;
   loading: boolean;
   more: boolean;
   onOlder: () => void;
   onRead?: (through: ReadTime) => void;
+  onActions: (id: string) => void;
+  actionsDisabled: boolean;
+  peerName: string;
+  selecting: boolean;
+  selectedIds: readonly string[];
+  onToggle: (id: string) => void;
 }) {
   // Visibility drives read receipts only. Scrolling shouldn't redraw the message bubbles.
   const visible = useRef(new Set<string>());
@@ -105,6 +304,7 @@ const MessageTimeline = memo(function MessageTimeline({
     [],
   );
   const { t, language } = useTranslation();
+  const selection = useMemo(() => new Set(selectedIds), [selectedIds]);
   const clock = useMemo(
     () => new Intl.DateTimeFormat(language, { hour: 'numeric', minute: '2-digit' }),
     [language],
@@ -123,6 +323,11 @@ const MessageTimeline = memo(function MessageTimeline({
       data={messages}
       keyExtractor={(item) => item.id}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      maintainVisibleContentPosition={scrollAnchor}
+      initialNumToRender={20}
+      maxToRenderPerBatch={12}
+      windowSize={9}
       ListFooterComponent={
         more ? (
           <Pressable accessibilityRole="button" disabled={loading} onPress={onOlder} style={s.link}>
@@ -133,44 +338,213 @@ const MessageTimeline = memo(function MessageTimeline({
       renderItem={({ item, index }) => {
         const mine = item.fromId === uid;
         const previous = messages[index + 1];
+        const joinedAbove = continuesMessageRun(previous, item);
         return (
           <View>
             {(!previous ||
               new Date(previous.time).toDateString() !== new Date(item.time).toDateString()) && (
               <Text style={s.date}>{date.format(item.time)}</Text>
             )}
-            <View style={[s.bubble, mine ? s.out : s.incoming]}>
-              {item.senderName && !mine && <Text style={s.accent}>{item.senderName}</Text>}
-              <Text selectable style={s.body}>
-                {item.text}
-              </Text>
-              <Text style={s.stamp}>{item.pending ? t('Sending…') : clock.format(item.time)}</Text>
-            </View>
+            <MessageBubble
+              id={item.id}
+              onActions={actionsDisabled ? undefined : onActions}
+              reply={item.reply}
+              uid={uid}
+              peerName={peerName}
+              edited={item.edited}
+              selecting={selecting}
+              selected={selection.has(item.id)}
+              onToggle={actionsDisabled ? undefined : onToggle}
+              mine={mine}
+              newest={index === 0}
+              joinedAbove={joinedAbove}
+              text={item.text}
+              sender={!mine && !joinedAbove ? item.senderName : undefined}
+              stamp={item.pending ? t('Sending…') : clock.format(item.time)}
+              status={mine ? messageStatus(item, readThrough) : undefined}
+            />
           </View>
         );
       }}
     />
   );
 });
+
+const MessageBubble = memo(function MessageBubble({
+  mine,
+  newest,
+  joinedAbove,
+  text,
+  sender,
+  stamp,
+  status,
+  id,
+  onActions,
+  reply,
+  uid,
+  peerName,
+  edited,
+  selecting,
+  selected,
+  onToggle,
+}: {
+  mine: boolean;
+  newest: boolean;
+  joinedAbove: boolean;
+  text: string;
+  sender?: string;
+  stamp: string;
+  status?: MessageStatus;
+  id: string;
+  onActions?: (id: string) => void;
+  reply?: MessageReply;
+  uid: string;
+  peerName: string;
+  edited?: boolean;
+  selecting: boolean;
+  selected: boolean;
+  onToggle?: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const arrival = useMessageArrival(newest);
+  const highlight = useChatProgress(selected ? 1 : 0, 160);
+  return (
+    <View style={s.messageRow}>
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, s.selectedRow, { opacity: highlight }]}
+      />
+      {selecting && (
+        <MessageSelectionControl
+          text={text}
+          selected={selected}
+          disabled={!onToggle}
+          onPress={() => onToggle?.(id)}
+        />
+      )}
+      <View style={s.bubbleColumn}>
+        <Animated.View
+          style={[
+            s.bubble,
+            mine ? s.out : s.incoming,
+            joinedAbove && s.joined,
+            joinedAbove && (mine ? s.outAbove : s.inAbove),
+            arrival,
+          ]}
+        >
+          <Pressable
+            onLongPress={() => (selecting ? onToggle?.(id) : onActions?.(id))}
+            delayLongPress={300}
+            onPress={
+              selecting
+                ? () => onToggle?.(id)
+                : Platform.OS === 'web'
+                  ? () => onActions?.(id)
+                  : undefined
+            }
+            accessibilityRole={selecting ? 'checkbox' : onActions ? 'button' : undefined}
+            accessibilityState={selecting ? { checked: selected } : undefined}
+            accessibilityHint={onActions ? t('Long press for message actions') : undefined}
+            accessibilityActions={
+              onActions ? [{ name: 'activate', label: t('Message actions') }] : undefined
+            }
+            onAccessibilityAction={() => (selecting ? onToggle?.(id) : onActions?.(id))}
+          >
+            {!!sender && <Text style={s.sender}>{sender}</Text>}
+            {reply && <ReplyPreview reply={reply} uid={uid} peerName={peerName} />}
+            <Text style={s.body}>{text}</Text>
+            <View style={s.metadata}>
+              {!!edited && <Text style={s.stamp}>{t('edited')}</Text>}
+              <Text style={s.stamp}>{stamp}</Text>
+              {status && status !== 'sending' && <MessageChecks read={status === 'read'} />}
+            </View>
+          </Pressable>
+        </Animated.View>
+      </View>
+    </View>
+  );
+});
+function MessageSelectionControl({
+  text,
+  selected,
+  disabled,
+  onPress,
+}: {
+  text: string;
+  selected: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const appearance = useMessageArrival(true);
+  return (
+    <Animated.View style={[s.selectionColumn, appearance]}>
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: selected, disabled }}
+        accessibilityLabel={text}
+        onPress={onPress}
+        disabled={disabled}
+        style={({ pressed }) => [s.selectionControl, pressed && s.selectionPressed]}
+      >
+        <SelectionCheck checked={selected} />
+      </Pressable>
+    </Animated.View>
+  );
+}
 const s = StyleSheet.create({
+  pane: { flex: 1, backgroundColor: '#12141B' },
   muted: { color: colors.muted, textAlign: 'center' },
   empty: { flex: 1, padding: 20, gap: 6, alignItems: 'center', justifyContent: 'center' },
   emptyHeading: { fontSize: 16, fontWeight: '600', color: colors.text },
   list: { flex: 1 },
-  timeline: { padding: 14 },
-  bubble: {
-    maxWidth: '82%',
-    minWidth: 68,
-    paddingHorizontal: 13,
-    paddingTop: 9,
-    paddingBottom: 6,
-    marginVertical: 3,
-    borderRadius: 17,
+  timeline: { paddingHorizontal: 14, paddingVertical: 14 },
+  messageRow: { flexDirection: 'row', gap: 4, borderRadius: 16 },
+  bubbleColumn: { flex: 1 },
+  selectionColumn: { width: 44, justifyContent: 'center' },
+  selectionControl: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  out: { backgroundColor: '#403A63', alignSelf: 'flex-end', borderBottomRightRadius: 5 },
-  incoming: { backgroundColor: '#222631', alignSelf: 'flex-start', borderBottomLeftRadius: 5 },
-  body: { color: colors.text, fontSize: 16, lineHeight: 22 },
-  stamp: { alignSelf: 'flex-end', fontSize: 11, color: '#D0CCDE', marginTop: 3 },
+  selectionPressed: { backgroundColor: '#BCB5FF14' },
+  selectedRow: {
+    backgroundColor: '#BCB5FF0E',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#BCB5FF24',
+  },
+  bubble: {
+    maxWidth: '86%',
+    minWidth: 68,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
+    marginTop: 10,
+    marginBottom: 2,
+    borderRadius: 18,
+  },
+  out: { backgroundColor: '#443B67', alignSelf: 'flex-end', borderBottomRightRadius: 7 },
+  incoming: { backgroundColor: '#232732', alignSelf: 'flex-start', borderBottomLeftRadius: 7 },
+  joined: { marginTop: 2 },
+  outAbove: { borderTopRightRadius: 6 },
+  inAbove: { borderTopLeftRadius: 6 },
+  body: { color: colors.text, fontSize: 15, lineHeight: 21 },
+  sender: { color: colors.accent, fontWeight: '600', fontSize: 12, marginBottom: 4 },
+  metadata: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  stamp: {
+    fontSize: 10,
+    lineHeight: 14,
+    color: '#C9C5D9',
+    fontVariant: ['tabular-nums'],
+  },
   date: {
     alignSelf: 'center',
     paddingHorizontal: 12,
@@ -178,8 +552,9 @@ const s = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: colors.input,
     color: colors.muted,
-    fontSize: 12,
-    marginVertical: 8,
+    fontSize: 11,
+    marginTop: 16,
+    marginBottom: 6,
   },
   errorRow: {
     paddingHorizontal: 16,

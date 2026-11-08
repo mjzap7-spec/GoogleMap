@@ -2,6 +2,7 @@ import type { Contact, ContactFocus } from '../../contacts/models/contact';
 import type { GroupLocation } from '../../contacts/models/sharing';
 import type { MapUserMarker } from './map';
 import type { TravelPoint } from './travel';
+export type MapPeopleFilter = 'all' | 'contacts' | 'groups' | 'nearby';
 
 function visibleTripTrails(trips: GroupLocation[]) {
   const routes = trips.filter((trip) => trip.trail.some((segment) => segment.length >= 2));
@@ -31,29 +32,49 @@ export function mapPeople(
   groupFocus: (GroupLocation & { revision: number }) | null,
   contactFocus: ContactFocus | null,
   contacts: readonly Contact[],
+  filter: MapPeopleFilter = 'all',
 ) {
   if (!showNearby) return { users: [], focus: null, sharedTrail: undefined };
   const now = Date.now();
+  const contactIds = new Set(
+    contacts.flatMap((contact) => (contact.peerId ? [contact.peerId] : [])),
+  );
+  const groupIds = new Set(
+    groupLocations.filter((person) => person.expiresAt > now).map((person) => person.id),
+  );
+  const nearbyIds = new Set(
+    nearby.filter((person) => person.expiresAt > now).map((person) => person.id),
+  );
+  const included = (id: string) =>
+    filter === 'all' ||
+    (filter === 'contacts' ? contactIds : filter === 'groups' ? groupIds : nearbyIds).has(id);
   const trips = new Map<string, GroupLocation>();
   for (const location of groupLocations) {
     if (
       location.trip &&
       location.id !== ownId &&
       location.expiresAt > now &&
+      included(location.id) &&
       !trips.has(location.id)
     )
       trips.set(location.id, location);
   }
   const selected = [groupFocus, contactFocus].find(
-    (person) => person && person.id !== ownId && person.expiresAt > now,
+    (person) => person && person.id !== ownId && person.expiresAt > now && included(person.id),
   );
   const names = new Map(contacts.map((contact) => [contact.peerId, contact.name]));
   const people = new Map<string, MapUserMarker>();
   // Reserve space for the selected person and joined groups before filling the nearby layer.
   for (const person of [selected, ...trips.values(), ...groupLocations, ...nearby]) {
-    if (!person || person.id === ownId || person.expiresAt <= now || people.has(person.id))
+    if (
+      !person ||
+      person.id === ownId ||
+      person.expiresAt <= now ||
+      people.has(person.id) ||
+      !included(person.id)
+    )
       continue;
-    const { id, nickname, avatarUrl, latitude, longitude, expiresAt } =
+    const { id, nickname, avatarUrl, latitude, longitude, expiresAt, updatedAt } =
       trips.get(person.id) ?? person;
     people.set(id, {
       id,
@@ -62,6 +83,7 @@ export function mapPeople(
       latitude,
       longitude,
       expiresAt,
+      updatedAt,
       ...(trips.has(id) && { trip: true }),
     });
     if (people.size === 500) break;

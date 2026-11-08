@@ -1,7 +1,7 @@
 import { TestUserCard } from '../../map/views/TestUserCard';
 import { useSharing } from '../../contacts/bindings/SharingProvider';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Redirect, router } from 'expo-router';
 import { PageSurface } from '../../../shared/motion/PageSurface';
 import { usePageTransition } from '../../../shared/motion/usePageTransition';
@@ -10,7 +10,7 @@ import { useSession } from '../bindings/useSession';
 import { SessionLoadingView } from '../views/SessionLoadingView';
 import { useContacts } from '../../contacts/bindings/useContacts';
 import { useMap } from '../../map/bindings/useMap';
-import { mapPeople } from '../../map/models/mapPeople';
+import { mapPeople, type MapPeopleFilter } from '../../map/models/mapPeople';
 import { usePersonChats } from '../../chat/bindings/usePersonChats';
 import { openPersonChat } from '../../chat/screens/openPersonChat';
 
@@ -44,6 +44,7 @@ function HomeContent({ error }: { error: string }) {
   const contacts = useContacts();
   const sharing = useSharing();
   const personChats = usePersonChats();
+  const [peopleFilter, setPeopleFilter] = useState<MapPeopleFilter>('all');
   const ownId = sharing.model.user.id;
   const testCount = map.state.testUserCount;
   const showNearby = contacts.state.showNearby;
@@ -73,6 +74,7 @@ function HomeContent({ error }: { error: string }) {
         sharing.state.focus,
         contacts.state.focus,
         contacts.state.contacts,
+        peopleFilter,
       ),
     [
       contacts.state.showNearby,
@@ -82,12 +84,15 @@ function HomeContent({ error }: { error: string }) {
       sharing.state.focus,
       contacts.state.focus,
       contacts.state.contacts,
+      peopleFilter,
     ],
   );
   return (
     <>
       <HomeView
         error={error}
+        peopleFilter={peopleFilter}
+        onPeopleFilter={setPeopleFilter}
         testCount={map.state.testUserCount}
         onStopTesting={() => map.commands.setTestUserCount(0)}
         tripGroup={
@@ -110,6 +115,7 @@ function HomeContent({ error }: { error: string }) {
             router.push({ pathname: '/contact/[id]', params: { id: contact.id } }),
           onSelect: (contact) => {
             if (!contacts.commands.canLocateOnMap()) return;
+            setPeopleFilter('all');
             map.commands.setTestUserCount(0);
             if (sharing.model.focusMember(contact.peerId)) return;
             sharing.model.clearFocus();

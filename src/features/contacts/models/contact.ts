@@ -27,6 +27,7 @@ export interface SharedMapUser {
   readonly latitude: number;
   readonly longitude: number;
   readonly expiresAt: number;
+  readonly updatedAt?: number;
 }
 export interface ContactFocus extends SharedMapUser {
   readonly revision: number;

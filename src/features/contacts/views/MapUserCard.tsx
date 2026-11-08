@@ -9,6 +9,7 @@ import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 import type { ContactsPanelProps } from './ContactsPanel';
 import { ChatIcon } from '../../../shared/ui/ChatIcon';
 import { UnreadBadge, chatButtonLabel } from '../../../shared/ui/UnreadBadge';
+import { LocationUpdate } from './LocationUpdate';
 export function MapUserCard({
   state,
   commands,
@@ -83,6 +84,7 @@ export function MapUserCard({
               <Text style={styles.closeText}>×</Text>
             </Pressable>
           </View>
+          {!!user && <LocationUpdate user={user} />}
           {state.loading && (
             <ActivityIndicator color={colors.accent} accessibilityLabel={t('Loading contacts')} />
           )}
