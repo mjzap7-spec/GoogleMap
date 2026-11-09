@@ -14,7 +14,7 @@ import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { colors } from '../../../shared/theme/colors';
 import { Avatar } from '../../../shared/ui/Avatar';
 import { ScreenHeader } from '../../../shared/ui/ScreenHeader';
-import { TextField } from '../../../shared/ui/TextField';
+import { SearchField } from '../../../shared/ui/SearchField';
 import {
   visibleConversations,
   type Conversation,
@@ -30,6 +30,7 @@ interface Props {
   rows: Conversation[];
   compact: boolean;
   showingList: boolean;
+  openingPerson?: boolean;
   onShowList: () => void;
   selected?: Conversation;
   transcript: React.ReactNode;
@@ -46,6 +47,7 @@ export function ChatView({
   rows,
   compact,
   showingList,
+  openingPerson = false,
   onShowList,
   selected,
   expandedGroup,
@@ -152,34 +154,20 @@ export function ChatView({
   ) : null;
   return (
     <KeyboardAvoidingView enabled={Platform.OS !== 'web'} behavior="padding" style={s.screen}>
-      <ScreenHeader title={compact && !showingList ? undefined : t('Chats')} onBack={onBack}>
+      <ScreenHeader
+        title={compact && !showingList && selected ? undefined : t('Chats')}
+        onBack={onBack}
+      >
         {compact && !showingList ? conversationHeader : null}
       </ScreenHeader>
       {(!compact || showingList) && (
         <View style={s.searchRow}>
-          <View accessible={false} style={s.searchIcon}>
-            <View style={s.searchHandle} />
-          </View>
-          <TextField
-            style={[s.search, !!search && s.searchWithClear]}
+          <SearchField
             accessibilityLabel={t('Search chats')}
             placeholder={t('Search chats')}
             value={search}
             onChangeText={setSearch}
-            returnKeyType="search"
-            autoCapitalize="none"
-            autoCorrect={false}
           />
-          {!!search && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('Clear search')}
-              onPress={() => setSearch('')}
-              style={s.clearSearch}
-            >
-              <Text style={s.clearIcon}>×</Text>
-            </Pressable>
-          )}
         </View>
       )}
       {!!error && (
@@ -274,7 +262,11 @@ export function ChatView({
           }}
         />
         <Animated.View style={[s.thread, threadMotion, showingList && s.hidden]}>
-          {selected ? (
+          {openingPerson ? (
+            <View style={s.placeholder}>
+              {!error && <ActivityIndicator color={colors.accent} />}
+            </View>
+          ) : selected ? (
             <>
               {!compact && conversationHeader}
               {transcript}
@@ -297,38 +289,7 @@ export function ChatView({
 }
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  searchRow: { marginHorizontal: 14, marginTop: 4, marginBottom: 12, justifyContent: 'center' },
-  search: { minHeight: 46, marginBottom: 0, paddingLeft: 40, fontSize: 14, borderRadius: 16 },
-  searchWithClear: { paddingRight: 44 },
-  searchIcon: {
-    position: 'absolute',
-    left: 15,
-    width: 13,
-    height: 13,
-    borderRadius: 7,
-    borderWidth: 1.6,
-    borderColor: colors.muted,
-    zIndex: 1,
-    pointerEvents: 'none',
-  },
-  searchHandle: {
-    position: 'absolute',
-    width: 6,
-    height: 1.6,
-    backgroundColor: colors.muted,
-    right: -5,
-    bottom: -2,
-    transform: [{ rotate: '45deg' }],
-  },
-  clearSearch: {
-    position: 'absolute',
-    right: 0,
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearIcon: { color: colors.muted, fontSize: 24 },
+  searchRow: { marginHorizontal: 16, marginTop: 4, marginBottom: 12, justifyContent: 'center' },
   panes: {
     flex: 1,
     flexDirection: 'row',

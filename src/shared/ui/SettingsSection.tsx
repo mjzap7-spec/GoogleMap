@@ -128,15 +128,15 @@ export function SettingsSymbol({
 }
 const s = StyleSheet.create({
   card: {
-    backgroundColor: '#191B24',
-    borderColor: '#2A2D39',
+    backgroundColor: colors.input,
+    borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 22,
-    marginBottom: 12,
+    borderRadius: 20,
+    marginBottom: 10,
     overflow: 'hidden',
   },
   open: { borderColor: '#3B3B50' },
-  header: { minHeight: 80, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 13 },
+  header: { minHeight: 74, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
   icon: {
     width: 48,
     height: 48,
@@ -145,7 +145,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  identity: { flex: 1, gap: 4 },
+  identity: { flex: 1, gap: 3 },
   title: { fontSize: 16, fontWeight: '600', color: colors.text },
   subtitle: { fontSize: 12, lineHeight: 18, color: colors.muted },
   chevron: {

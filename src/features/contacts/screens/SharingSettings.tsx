@@ -1,11 +1,11 @@
 import React from 'react';
 import { SharingSettingsView } from '../views/SharingSettingsView';
 import { useSharing } from '../bindings/SharingProvider';
-import { useMap } from '../../map/bindings/useMap';
+import { useMapControls } from '../../map/bindings/useMapControls';
 import { useContacts } from '../bindings/useContacts';
 export function SharingSettings() {
   const { state, model } = useSharing();
-  const map = useMap();
+  const map = useMapControls();
   const contacts = useContacts();
   return (
     <SharingSettingsView
@@ -17,7 +17,7 @@ export function SharingSettings() {
         .map((group) => group.name)}
       recording={map.state.recording}
       onRecording={map.commands.toggleRecording}
-      recordingDisabled={!map.state.recording && map.state.recordedPoints >= 5000}
+      recordingDisabled={!map.state.recording && map.state.recordingFull}
       showPeople={contacts.state.showNearby}
       onShowPeople={contacts.commands.setShowNearby}
     />

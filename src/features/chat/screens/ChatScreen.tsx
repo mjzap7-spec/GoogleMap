@@ -3,7 +3,7 @@ import { AppState, BackHandler, Keyboard, Platform, useWindowDimensions } from '
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useSession } from '../../auth/bindings/useSession';
 import { useContactsContext } from '../../contacts/bindings/ContactsProvider';
-import { useSharing } from '../../contacts/bindings/SharingProvider';
+import { useSharingGroups } from '../../contacts/bindings/SharingProvider';
 import {
   conversationList,
   resolveConversation,
@@ -16,6 +16,7 @@ import { useUnreadChats } from '../bindings/UnreadChatsProvider';
 import { ChatView } from '../views/ChatView';
 import { MessagePane } from '../views/MessagePane';
 import type { ChatPeer, ReadTime } from '../models/chat';
+import { personConversation } from '../models/personConversation';
 
 function foreground() {
   if (Platform.OS === 'web')
@@ -68,14 +69,16 @@ function Thread({
   );
 }
 export function ChatScreen() {
-  const { id, group, member } = useLocalSearchParams<{
+  const { id, group, member, person } = useLocalSearchParams<{
     id?: string;
     group?: string;
     member?: string;
+    person?: string;
   }>();
   return (
     <ChatWorkspace
-      key={JSON.stringify([id, group, member])}
+      key={JSON.stringify([id, group, member, person])}
+      initialPerson={person}
       initialKey={
         group
           ? member
@@ -93,19 +96,22 @@ export function ChatScreen() {
 function ChatWorkspace({
   initialKey,
   initialGroup,
+  initialPerson,
 }: {
   initialKey?: string;
   initialGroup?: string;
+  initialPerson?: string;
 }) {
   const {
     state: { user },
   } = useSession();
   const { state: contacts, commands } = useContactsContext();
-  const { state: sharing, model: groups } = useSharing();
+  const { state: sharing, model: groups } = useSharingGroups();
   const uid = user?.id ?? '';
   const focused = useIsFocused();
   const compact = useWindowDimensions().width < 640;
-  const [listOpen, setListOpen] = useState(!initialKey);
+  const [listOpen, setListOpen] = useState(!initialKey && !initialPerson);
+  const [pendingPerson, setPendingPerson] = useState(initialPerson);
   const [optionsRequest, setOptionsRequest] = useState(0);
   const inbox = useConversation(uid, undefined, focused);
   const activity = useGroupChatActivity(uid, sharing.groups, focused);
@@ -125,10 +131,48 @@ function ChatWorkspace({
   const [choice, setChoice] = useState<ChatSelection | undefined>(
     initialKey ? { key: initialKey, groupId: initialGroup } : undefined,
   );
+  const personEntry = useMemo(
+    () =>
+      pendingPerson && !contacts.loading && sharing.membershipsLoaded && !inbox.state.loading
+        ? personConversation(
+            uid,
+            pendingPerson,
+            contacts.contacts,
+            sharing.groups,
+            inbox.state.previews,
+            activity.entries,
+            unread.counts,
+          )
+        : undefined,
+    [
+      pendingPerson,
+      uid,
+      contacts.loading,
+      contacts.contacts,
+      sharing.membershipsLoaded,
+      sharing.groups,
+      inbox.state.loading,
+      inbox.state.previews,
+      activity.entries,
+      unread.counts,
+    ],
+  );
+  // Resolve once before mounting the transcript; live read receipts must not switch it later.
+  if (!contacts.loadError && !inbox.state.error) {
+    if (personEntry?.status === 'ready') {
+      setChoice(personEntry.selection);
+      setPendingPerson(undefined);
+    } else if (personEntry?.status === 'unavailable') {
+      setPendingPerson(undefined);
+      setListOpen(true);
+    }
+  }
   const selected = resolveConversation(rows, choice);
-  const showingList = compact && (listOpen || !selected);
+  const openingPerson = !!pendingPerson;
+  const showingList = compact && (listOpen || (!selected && !openingPerson));
   const showList = useCallback(() => {
     Keyboard.dismiss();
+    setPendingPerson(undefined);
     setListOpen(true);
   }, []);
   useEffect(() => {
@@ -164,6 +208,7 @@ function ChatWorkspace({
       rows={rows}
       compact={compact}
       showingList={showingList}
+      openingPerson={openingPerson}
       onShowList={showList}
       onThreadOptions={() => {
         Keyboard.dismiss();
@@ -171,6 +216,7 @@ function ChatWorkspace({
       }}
       selected={selected?.row}
       onSelect={(next, openThread = true) => {
+        setPendingPerson(undefined);
         setOptionsRequest(0);
         setChoice(next);
         setListOpen(!openThread);

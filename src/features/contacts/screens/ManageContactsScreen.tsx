@@ -3,7 +3,7 @@ import { PrivateGroups } from './PrivateGroups';
 import { useUnreadChats } from '../../chat/bindings/UnreadChatsProvider';
 import { usePersonChats } from '../../chat/bindings/usePersonChats';
 import { openPersonChat } from '../../chat/screens/openPersonChat';
-import { useSharing } from '../bindings/SharingProvider';
+import { useSharingGroups } from '../bindings/SharingProvider';
 import React, { useRef, useEffect } from 'react';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useContactsContext } from '../bindings/ContactsProvider';
@@ -14,7 +14,7 @@ export function ManageContactsScreen() {
   const { state, commands, model } = useContactsContext();
   const map = useMapViewModel();
   const { section } = useLocalSearchParams<{ section?: string }>();
-  const sharing = useSharing();
+  const sharing = useSharingGroups();
   const personChats = usePersonChats();
   const {
     state: { counts },
@@ -45,7 +45,8 @@ export function ManageContactsScreen() {
           commands,
           onChat: (contact) => {
             const chat = contact.peerId && personChats.get(contact.peerId);
-            if (chat) transition.navigate(() => openPersonChat(chat));
+            const personId = contact.peerId;
+            if (chat && personId) transition.navigate(() => openPersonChat(personId));
           },
           onEdit: (contact) =>
             transition.navigate(() =>

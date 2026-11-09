@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme/colors';
 /** Show initials while loading and after failure; never shift the surrounding row. */
-export function Avatar({
+export const Avatar = memo(function Avatar({
   uri,
   name,
   size = 40,
@@ -30,7 +30,7 @@ export function Avatar({
       )}
     </View>
   );
-}
+});
 const styles = StyleSheet.create({
   frame: {
     backgroundColor: '#BCB5FF18',

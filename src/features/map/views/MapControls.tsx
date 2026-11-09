@@ -41,6 +41,7 @@ export function MapControls({
               style={({ pressed }) => [
                 styles.zoomButton,
                 index === 0 && styles.zoomDivider,
+                !ready && { opacity: 0.45 },
                 pressed && styles.pressed,
               ]}
             >
@@ -68,6 +69,14 @@ export function MapControls({
       <View style={styles.locationCard}>
         {!state.live && (state.tracking === 'tracking' || state.tracking === 'requesting') && (
           <ActivityIndicator color={colors.accent} size="small" />
+        )}
+        {!!state.live && (
+          <View
+            style={[
+              styles.locationDot,
+              state.tracking !== 'tracking' && { backgroundColor: colors.muted },
+            ]}
+          />
         )}
         <View style={{ flex: 1 }}>
           <Text style={styles.locationTitle}>
@@ -169,7 +178,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   locationTitle: { color: colors.text, fontSize: 13, fontWeight: '500', lineHeight: 19 },
-  locationSubtitle: { color: colors.muted, fontSize: 11, lineHeight: 17 },
+  locationSubtitle: { color: colors.muted, fontSize: 12, lineHeight: 18 },
   locationDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
-  retry: { minHeight: 36, justifyContent: 'center' },
+  retry: { minHeight: 44, justifyContent: 'center' },
 });

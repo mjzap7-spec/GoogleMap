@@ -7,7 +7,10 @@ import React, { memo, useDeferredValue, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, FlatList, StyleSheet, Text, View } from 'react-native';
 import type { Contact } from '../models/contact';
 import type { ContactsState, ContactsViewModel } from '../viewmodels/ContactsViewModel';
-import { TextField } from '../../../shared/ui/TextField';
+import { SearchField } from '../../../shared/ui/SearchField';
+import { ListEmptyState } from '../../../shared/ui/ListEmptyState';
+import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
+import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 import { colors } from '../../../shared/theme/colors';
 export interface ContactsPanelProps {
   state: Readonly<ContactsState>;
@@ -65,25 +68,14 @@ export const ContactsPanel = memo(function ContactsPanel({
     <View style={fill ? { flex: 1, minHeight: 0 } : { flexShrink: 1, minHeight: 0 }}>
       <View style={styles.topRow}>
         <View style={styles.search}>
-          <TextField
+          <SearchField
             accessibilityLabel={t('Search contacts')}
             placeholder={t('Search contacts')}
             value={search}
             onChangeText={setSearch}
             autoCorrect={false}
             returnKeyType="search"
-            style={{ paddingRight: 48, marginBottom: 0 }}
           />
-          {!!search && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('Clear search')}
-              onPress={() => setSearch('')}
-              style={styles.clearSearch}
-            >
-              <Text style={styles.clearGlyph}>×</Text>
-            </Pressable>
-          )}
         </View>
         <Pressable
           accessibilityRole="button"
@@ -111,19 +103,27 @@ export const ContactsPanel = memo(function ContactsPanel({
           </Pressable>
         </>
       )}
-      {!state.loading && !state.contacts.length && (
-        <Text style={styles.muted}>{t('No contacts yet. Send a request to add someone.')}</Text>
-      )}
-      {!!term && !filteredContacts.length && (
-        <Text style={styles.muted}>{t('No matching contacts.')}</Text>
-      )}
       <FlatList
         style={fill ? { flex: 1 } : { maxHeight: listHeight, minHeight: 0, flexShrink: 1 }}
         data={filteredContacts}
         keyExtractor={(contact) => contact.id}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        initialNumToRender={8}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={fill && !filteredContacts.length ? styles.emptyList : undefined}
+        ListEmptyComponent={
+          !state.loading && !state.loadError ? (
+            <ListEmptyState
+              icon={<ContactsIcon />}
+              message={t(
+                term ? 'No matching contacts.' : 'No contacts yet. Send a request to add someone.',
+              )}
+            />
+          ) : undefined
+        }
         renderItem={({ item: contact }) => {
           const chat = contact.peerId ? personChats.get(contact.peerId) : undefined;
           const count = chat?.unread ?? 0;
@@ -184,22 +184,23 @@ export const ContactsPanel = memo(function ContactsPanel({
             <Text style={styles.accent}>{t('Show all')}</Text>
           </Pressable>
         )}
-        <Pressable
-          accessibilityRole="button"
-          onPress={commands.openForm}
-          style={({ pressed }) => [
-            styles.add,
-            onShowAll && styles.dropdownAdd,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.accent}>{t('+ New contact')}</Text>
-        </Pressable>
+        {onShowAll ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={commands.openForm}
+            style={({ pressed }) => [styles.add, styles.dropdownAdd, pressed && styles.pressed]}
+          >
+            <Text style={styles.accent}>{t('+ New contact')}</Text>
+          </Pressable>
+        ) : (
+          <PrimaryButton label={t('+ New contact')} busy={false} onPress={commands.openForm} />
+        )}
       </View>
     </View>
   );
 });
 const styles = StyleSheet.create({
+  emptyList: { flexGrow: 1, justifyContent: 'center' },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   inbox: {
     width: 48,
@@ -216,16 +217,6 @@ const styles = StyleSheet.create({
   fullActions: { marginTop: 12 },
   dropdownAdd: { flex: 1 },
   showAll: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  clearSearch: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    width: 44,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearGlyph: { color: colors.muted, fontSize: 23 },
   badge: {
     position: 'absolute',
     top: -3,
@@ -247,12 +238,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  avatar: { width: 38, height: 38, borderRadius: 19 },
-  initial: { backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
   person: {
     flex: 1,
     minWidth: 0,
-    minHeight: 58,
+    minHeight: 68,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,

@@ -8,7 +8,8 @@ import { openPersonChat } from '../../chat/screens/openPersonChat';
 export function ContactNotificationHost() {
   const { state, commands } = useContactsContext();
   const chats = usePersonChats();
-  const chat = state.selectedUser && chats.get(state.selectedUser.id);
+  const personId = state.selectedUser?.id;
+  const chat = personId ? chats.get(personId) : undefined;
   return (
     <>
       <Feedback
@@ -22,10 +23,10 @@ export function ContactNotificationHost() {
         commands={commands}
         unread={chat?.unread ?? 0}
         onChat={
-          chat
+          chat && personId
             ? () => {
                 commands.closeMapUser();
-                openPersonChat(chat);
+                openPersonChat(personId);
               }
             : undefined
         }

@@ -41,6 +41,8 @@ flowchart TD
 
 `ObservableViewModel` exposes stable `subscribe` and `getSnapshot` functions. Bindings use `useSyncExternalStore` to observe those snapshots. The form binding projects only the public command surface; views do not receive the ViewModel instance or its repository.
 
+For frequently changing state, `useViewModelSelection` subscribes to only the fields a screen needs. Its framework-independent `selectSnapshot` helper preserves selection identity when unrelated fields change. Keep selectors and equality functions stable, and include every field the consumer reads. Chat lists use `useSharingGroups`; toolbar controls use `useMapControls`, so GPS fixes do not re-render those surfaces. Membership, error, and recording changes still propagate immediately.
+
 Dependency direction is enforced by `eslint.config.js`, including restrictions for Models, ViewModels, Views, bindings, adapters, shared code, and route containers. Type-only imports of state/command contracts from ViewModels are allowed in Views.
 
 ## Composition and lifetime
@@ -74,6 +76,8 @@ Firebase `User`, `Auth`, Firestore snapshots, and Storage references never cross
 Each auth page is an explicit View. `AuthFormLayout` supplies the common heading, feedback, submit button, and footer slot. `CredentialsFields` supplies shared credential inputs; `ProfileView` composes signed-in profile inputs and `AvatarField`. Authentication forms contain credentials only. There is no giant component switching the entire form based on page mode.
 
 `shared/ui/styles.ts` defines common typography, layout, controls, and feedback styles. `views/styles.ts` contains only auth-specific arrangements. Colors live in `shared/theme/colors.ts`. Root CSS, app.json native backgrounds, the navigation theme, and `PageSurface` keep the underlying surface dark. If you change the background color, update the matching value in `global.css` and `app.json` too.
+
+Reuse `SearchField` for search icons, focus styling, and keyboard-preserving clear actions; `SegmentedControl` for animated mutually exclusive tabs; and `ListEmptyState` for empty lists. `PrimaryButton` owns press feedback and reserves its label's dimensions while showing a loading indicator. Filtering stays in the feature layer, with deferred queries for responsive typing. Translation callbacks remain stable until the language changes, allowing translated lists to be memoized safely.
 
 Animation timings live in `shared/motion/tokens.ts`. Native routes use the native stack fade. Web uses a short exit/enter sequence. `PageSurface` stays opaque while only its content fades; reduced-motion settings disable page animation.
 
@@ -180,3 +184,7 @@ ExpoLocationTracker implements the LocationTracker model contract and is selecte
 ## Contact requests and nearby presence
 
 ContactsProvider owns one ContactsViewModel per authenticated UID outside the route stack. It maintains contact and request listeners across signed-in screens and hosts ContactNotificationHost. useContacts supplies Map-screen GPS/foreground state without owning the provider lifetime. ContactEditorViewModel owns the protected contact/[id] editor and writes only a private nickname or mutual removal. FirebaseContactRepository implements registration, directory lookup, transactions, read-only profile hydration, and bounded geohash subscriptions. The Map bridge receives only public marker data and an explicit focus revision, preserving GPS follow and travelled-path rendering. Security rules enforce sender identity, recipient-only atomic acceptance, mutual profile consent, nickname-only updates, and short location leases. See SOCIAL_SETUP.md for schema, deployment, quotas, and tests.
+
+## Person-to-chat navigation
+
+Map user cards and contact chat buttons pass the person's UID to `openPersonChat`. The chat workspace waits for contact, membership, inbox, and relevant private-member activity snapshots before `personConversation` selects an accessible transcript: unread messages first, then the latest activity. The resolved selection stays fixed while reading, so live receipts or list reordering cannot switch conversations. Explicit group-room and member links keep their specified targets. History remains filtered by `DeviceChatRepository`, including messages deleted only on this device; navigation never copies or rewrites Firebase messages.

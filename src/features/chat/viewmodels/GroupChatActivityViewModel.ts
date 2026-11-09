@@ -33,9 +33,10 @@ export class GroupChatActivityViewModel extends ObservableViewModel<{
       const next = (value: GroupActivity) => {
         if (this.watches.get(key) !== current) return;
         const previous = this.state.entries.get(key);
-        // Most private threads are empty. Neither that snapshot nor a metadata-only
-        // acknowledgement changes what is displayed in the chat list.
+        // Record the first (even empty) result so entry routing knows it has loaded.
+        // Repeated empty snapshots and metadata acknowledgements need no list update.
         if (
+          previous &&
           !value.cards &&
           !previous?.cards &&
           value.failed === previous?.failed &&

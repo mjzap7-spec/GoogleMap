@@ -1,6 +1,6 @@
 import { useTranslation } from '../../../../shared/i18n/LanguageProvider';
 import React, { type ReactNode, type PropsWithChildren } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../../../../shared/theme/colors';
 import { ScreenLayout } from '../../../../shared/ui/ScreenLayout';
 import { PrimaryButton } from '../../../../shared/ui/PrimaryButton';
@@ -73,26 +73,14 @@ export function AuthFormLayout({
             <Text style={styles.dividerText}>{t('or')}</Text>
             <View style={styles.rule} />
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('Continue with Google')}
-            accessibilityState={{ disabled: isFormBusy(state), busy: state.googleBusy }}
+          <PrimaryButton
+            variant="neutral"
+            label={t('Continue with Google')}
+            busy={state.googleBusy}
             disabled={isFormBusy(state)}
             onPress={commands.continueWithGoogle}
-            style={({ pressed }) => [
-              styles.google,
-              { opacity: pressed || isFormBusy(state) ? 0.6 : 1 },
-            ]}
-          >
-            {state.googleBusy ? (
-              <ActivityIndicator color={colors.text} />
-            ) : (
-              <>
-                <GoogleIcon />
-                <Text style={styles.googleLabel}>{t('Continue with Google')}</Text>
-              </>
-            )}
-          </Pressable>
+            leadingIcon={<GoogleIcon />}
+          />
         </>
       )}
       {!google && footer}
@@ -123,25 +111,5 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     paddingTop: 6,
-  },
-  google: {
-    minHeight: 52,
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.input,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  googleLabel: {
-    flexShrink: 1,
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
   },
 });

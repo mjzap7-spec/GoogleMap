@@ -70,7 +70,10 @@ export class FirebaseChatRepository implements ChatRepository {
   inbox(uid: string, next: (rows: ChatPreview[]) => void, fail: () => void) {
     return onSnapshot(
       collection(this.database(uid), 'users', uid, 'chatInbox'),
+      { includeMetadataChanges: true },
       (snap) => {
+        // An unpopulated local cache does not establish that this person has no history.
+        if (snap.empty && snap.metadata.fromCache) return;
         next(
           snap.docs.map((item) => {
             const data = item.data({ serverTimestamps: 'estimate' });
@@ -267,6 +270,7 @@ export class FirebaseChatRepository implements ChatRepository {
       { includeMetadataChanges: true },
       (snap) => {
         if (stopped) return;
+        if (snap.empty && snap.metadata.fromCache) return;
         rows = snap.docs
           .map((item) => {
             const data = item.data({ serverTimestamps: 'estimate' });

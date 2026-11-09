@@ -1,4 +1,12 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Animated,
   Easing,
@@ -11,7 +19,7 @@ import {
   type ScrollViewInstance,
 } from 'react-native';
 import { ScreenHeader } from '../../../shared/ui/ScreenHeader';
-import { TextField } from '../../../shared/ui/TextField';
+import { SearchField } from '../../../shared/ui/SearchField';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { useReducedMotion } from '../../../shared/motion/useReducedMotion';
 import { colors } from '../../../shared/theme/colors';
@@ -84,7 +92,7 @@ export function HelpView({ onBack, topic }: { onBack: () => void; topic?: string
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [collapsedMatches, setCollapsedMatches] = useState<string[]>([]);
-  const search = query.trim().toLocaleLowerCase();
+  const search = useDeferredValue(query.trim().toLocaleLowerCase());
   const initial = topics.find(([title]) => title === topic)?.[0] ?? topics[0][0];
   const [expanded, setExpanded] = useState<string | null>(initial);
   const scroll = useRef<ScrollViewInstance>(null);
@@ -118,14 +126,25 @@ export function HelpView({ onBack, topic }: { onBack: () => void; topic?: string
     },
     [takeControl, search],
   );
-  const filtered = topics.filter(([title, body]) =>
-    (t(title) + ' ' + t(body)).toLocaleLowerCase().includes(search),
+  const translatedTopics = useMemo(
+    () =>
+      topics.map(([title, body]) => ({
+        id: title,
+        title: t(title),
+        body: t(body),
+        search: (t(title) + ' ' + t(body)).toLocaleLowerCase(),
+      })),
+    [t],
+  );
+  const filtered = useMemo(
+    () => translatedTopics.filter((item) => item.search.includes(search)),
+    [translatedTopics, search],
   );
   return (
     <View style={styles.screen}>
       <ScreenHeader title={t('Help')} onBack={onBack} />
       <View style={styles.search}>
-        <TextField
+        <SearchField
           accessibilityLabel={t('Search help')}
           placeholder={t('Search help')}
           value={query}
@@ -149,14 +168,14 @@ export function HelpView({ onBack, topic }: { onBack: () => void; topic?: string
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
-        {filtered.map(([title, body]) => (
+        {filtered.map(({ id, title, body }) => (
           <Topic
-            key={title}
-            id={title}
-            title={t(title)}
-            body={t(body)}
-            open={search ? !collapsedMatches.includes(title) : expanded === title}
-            onLayout={title === initial ? measureInitial : undefined}
+            key={id}
+            id={id}
+            title={title}
+            body={body}
+            open={search ? !collapsedMatches.includes(id) : expanded === id}
+            onLayout={id === initial ? measureInitial : undefined}
             onPress={toggle}
           />
         ))}

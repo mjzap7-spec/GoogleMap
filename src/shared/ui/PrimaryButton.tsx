@@ -1,6 +1,15 @@
 import { useTranslation } from '../i18n/LanguageProvider';
 import React, { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, Easing, Platform, Pressable, Text } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useReducedMotion } from '../motion/useReducedMotion';
 import { motion } from '../motion/tokens';
 import { colors } from '../theme/colors';
@@ -12,7 +21,7 @@ interface PrimaryButtonProps {
   onPress: () => void;
   label: string;
   leadingIcon?: ReactNode;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'neutral';
 }
 
 export function PrimaryButton({
@@ -29,6 +38,7 @@ export function PrimaryButton({
   const reducedMotion = useReducedMotion();
 
   function animatePress(value: number) {
+    scale.stopAnimation();
     if (reducedMotion !== false) {
       scale.setValue(1);
       return;
@@ -38,6 +48,7 @@ export function PrimaryButton({
       duration: motion.buttonDuration,
       easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
+      isInteraction: false,
     }).start();
   }
 
@@ -61,34 +72,48 @@ export function PrimaryButton({
         onPressOut={() => animatePress(1)}
         style={({ pressed }) => [
           ui.button,
-          variant === 'secondary' && {
+          variant !== 'primary' && {
             backgroundColor: colors.input,
             borderWidth: 1,
             borderColor: colors.border,
           },
-          leadingIcon
-            ? { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingVertical: 12 }
-            : null,
-          (isDisabled || pressed) && { opacity: 0.8 },
+          { paddingHorizontal: 16, paddingVertical: 12 },
+          { opacity: busy ? 0.85 : disabled ? 0.5 : pressed ? 0.9 : 1 },
         ]}
       >
-        {busy ? (
-          <ActivityIndicator color={variant === 'secondary' ? colors.accent : colors.buttonText} />
-        ) : (
-          <>
-            {leadingIcon}
-            <Text
-              style={[
-                ui.buttonText,
-                { flexShrink: 1, textAlign: 'center' },
-                variant === 'secondary' && { color: colors.accent },
-              ]}
-            >
-              {t(label)}
-            </Text>
-          </>
+        <View
+          accessibilityElementsHidden={busy}
+          importantForAccessibility={busy ? 'no-hide-descendants' : 'auto'}
+          style={[s.content, busy && { opacity: 0 }]}
+        >
+          {leadingIcon}
+          <Text
+            style={[
+              ui.buttonText,
+              { flexShrink: 1, textAlign: 'center' },
+              variant === 'secondary' && { color: colors.accent },
+              variant === 'neutral' && { color: colors.text },
+            ]}
+          >
+            {t(label)}
+          </Text>
+        </View>
+        {busy && (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.loading]}>
+            <ActivityIndicator color={variant === 'primary' ? colors.buttonText : colors.accent} />
+          </View>
         )}
       </Pressable>
     </Animated.View>
   );
 }
+const s = StyleSheet.create({
+  content: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  loading: { alignItems: 'center', justifyContent: 'center' },
+});

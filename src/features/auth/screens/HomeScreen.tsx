@@ -109,7 +109,7 @@ function HomeContent({ error }: { error: string }) {
           onShowAll: () => router.navigate('/contacts'),
           onChat: (contact) => {
             const chat = contact.peerId && personChats.get(contact.peerId);
-            if (chat) openPersonChat(chat);
+            if (chat && contact.peerId) openPersonChat(contact.peerId);
           },
           onEdit: (contact) =>
             router.push({ pathname: '/contact/[id]', params: { id: contact.id } }),

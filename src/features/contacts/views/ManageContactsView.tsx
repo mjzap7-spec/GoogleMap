@@ -1,7 +1,8 @@
 import React, { type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { colors } from '../../../shared/theme/colors';
+import { SegmentedControl } from '../../../shared/ui/SegmentedControl';
 import { ScreenHeader } from '../../../shared/ui/ScreenHeader';
 import { ContactsPanel, type ContactsPanelProps } from './ContactsPanel';
 export function ManageContactsView({
@@ -29,20 +30,17 @@ export function ManageContactsView({
       />
       <View style={styles.body}>
         <View style={styles.tabs}>
-          {(['contacts', 'groups'] as const).map((item) => (
-            <Pressable
-              key={item}
-              accessibilityRole="button"
-              accessibilityState={{ selected: tab === item }}
-              onPress={() => setTab(item)}
-              style={[styles.tab, tab === item && styles.selectedTab]}
-            >
-              <Text style={styles.tabText}>
-                {t(item === 'contacts' ? 'Contacts' : 'Private groups')}
-                {item === 'groups' && invitations > 0 ? ' · ' + invitations : ''}
-              </Text>
-            </Pressable>
-          ))}
+          <SegmentedControl
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'contacts', label: t('Contacts') },
+              {
+                value: 'groups',
+                label: t('Private groups') + (invitations > 0 ? ' · ' + invitations : ''),
+              },
+            ]}
+          />
         </View>
         {tab === 'groups' ? (
           <View style={{ flex: 1 }}>{groups}</View>
@@ -56,17 +54,7 @@ export function ManageContactsView({
   );
 }
 const styles = StyleSheet.create({
-  tabs: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  tab: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: 16,
-    backgroundColor: colors.input,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  selectedTab: { borderWidth: 1, borderColor: colors.accent, backgroundColor: '#BCB5FF18' },
-  tabText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  tabs: { marginBottom: 16 },
   screen: { flex: 1, backgroundColor: colors.background },
   body: {
     flex: 1,
@@ -79,11 +67,6 @@ const styles = StyleSheet.create({
   panel: {
     flex: 1,
     minHeight: 0,
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.input,
     marginBottom: 12,
   },
 });

@@ -10,8 +10,11 @@ import {
 } from 'react-native';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { colors } from '../../../shared/theme/colors';
+import { useLayoutMotion } from '../../../shared/motion/useLayoutMotion';
+import { ListEmptyState } from '../../../shared/ui/ListEmptyState';
+import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
 import { FormField } from '../../../shared/ui/FormField';
-import { TextField } from '../../../shared/ui/TextField';
+import { SearchField } from '../../../shared/ui/SearchField';
 import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 import { Avatar } from '../../../shared/ui/Avatar';
 import { GroupRowHeader } from './GroupRowHeader';
@@ -59,6 +62,7 @@ export function PrivateGroupsView({
   retryRoster: () => void;
 }) {
   const { t } = useTranslation();
+  const animateLayout = useLayoutMotion();
   const [confirming, setConfirming] = useState('');
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
@@ -126,19 +130,26 @@ export function PrivateGroupsView({
   return (
     <>
       <Feedback source="groups" error={state.error} />
-      <TextField
-        accessibilityLabel={t('Search groups')}
-        placeholder={t('Search groups')}
-        value={search}
-        onChangeText={setSearch}
-        autoCorrect={false}
-        returnKeyType="search"
-      />
+      <View style={styles.search}>
+        <SearchField
+          accessibilityLabel={t('Search groups')}
+          placeholder={t('Search groups')}
+          value={search}
+          onChangeText={setSearch}
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+      </View>
       <SectionList
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.list}
         sections={sections}
         stickySectionHeadersEnabled={false}
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
         renderSectionHeader={({ section }) => (
           <View style={styles.sectionHeading}>
             <Text accessibilityRole="header" style={styles.sectionTitle}>
@@ -152,9 +163,10 @@ export function PrivateGroupsView({
           state.error ? undefined : !state.membershipsLoaded || !state.directoryLoaded ? (
             <ActivityIndicator style={styles.empty} color={colors.accent} />
           ) : (
-            <Text style={[styles.hint, styles.empty]}>
-              {t(filter.trim() ? 'No matching groups.' : 'No private groups yet.')}
-            </Text>
+            <ListEmptyState
+              icon={<ContactsIcon />}
+              message={t(filter.trim() ? 'No matching groups.' : 'No private groups yet.')}
+            />
           )
         }
         renderItem={({ item: group }) => {
@@ -170,6 +182,7 @@ export function PrivateGroupsView({
                 onToggle={
                   joined
                     ? () => {
+                        animateLayout();
                         setConfirming('');
                         commands.selectGroup(selected ? '' : group.id);
                       }
@@ -375,12 +388,13 @@ export function PrivateGroupsView({
   );
 }
 const styles = StyleSheet.create({
+  search: { marginBottom: 8 },
   list: { paddingBottom: 12 },
   sectionHeading: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 8,
   },
   sectionTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
@@ -395,7 +409,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   empty: { paddingVertical: 20, textAlign: 'center' },
-  groupCard: { paddingHorizontal: 14, paddingVertical: 12, marginBottom: 6, borderRadius: 18 },
+  groupCard: { paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10, borderRadius: 18 },
   content: { gap: 16, paddingBottom: 20 },
   createAction: { paddingTop: 4, paddingBottom: 12 },
   card: {

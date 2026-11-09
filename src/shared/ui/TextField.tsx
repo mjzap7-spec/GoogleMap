@@ -22,7 +22,7 @@ export function TextField({
       placeholderTextColor={colors.placeholder}
       keyboardAppearance="dark"
       selectionColor={colors.accent}
-      style={[ui.input, focused && ui.inputFocused, style]}
+      style={[ui.input, style, focused && ui.inputFocused]}
       onFocus={(event) => {
         setFocused(true);
         onFocus?.(event);

@@ -11,7 +11,8 @@ import type { AuthUser } from '../../auth/models/auth';
 import { useAuthDependencies } from '../../auth/bindings/AuthProvider';
 import { useContactsContext } from './ContactsProvider';
 import { useMapViewModel } from '../../map/bindings/MapProvider';
-import type { SharingViewModel } from '../viewmodels/SharingViewModel';
+import type { SharingState, SharingViewModel } from '../viewmodels/SharingViewModel';
+import { useViewModelSelection } from '../../../shared/mvvm/useViewModelSelection';
 const Context = createContext<SharingViewModel | null>(null);
 export function SharingProvider({ user, children }: PropsWithChildren<{ user: AuthUser }>) {
   const { createSharing } = useAuthDependencies();
@@ -57,5 +58,21 @@ export function useSharing() {
   const model = useContext(Context);
   if (!model) throw new Error('SharingProvider is required.');
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
+  return { state, model };
+}
+
+const selectGroups = (state: Readonly<SharingState>) => ({
+  groups: state.groups,
+  membershipsLoaded: state.membershipsLoaded,
+  error: state.error,
+});
+const sameGroups = (a: ReturnType<typeof selectGroups>, b: ReturnType<typeof selectGroups>) =>
+  a.groups === b.groups && a.membershipsLoaded === b.membershipsLoaded && a.error === b.error;
+
+/** Chat and contact lists must not re-render for every shared GPS fix. */
+export function useSharingGroups() {
+  const model = useContext(Context);
+  if (!model) throw new Error('SharingProvider is required.');
+  const state = useViewModelSelection(model, selectGroups, sameGroups);
   return { state, model };
 }

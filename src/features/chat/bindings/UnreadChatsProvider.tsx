@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import { useAuthDependencies } from '../../auth/bindings/AuthProvider';
 import { useContactsContext } from '../../contacts/bindings/ContactsProvider';
-import { useSharing } from '../../contacts/bindings/SharingProvider';
+import { useSharingGroups } from '../../contacts/bindings/SharingProvider';
 import type { UnreadChatsViewModel } from '../viewmodels/UnreadChatsViewModel';
 
 const Context = createContext<UnreadChatsViewModel | null>(null);
@@ -20,7 +20,7 @@ export function UnreadChatsProvider({ uid, children }: PropsWithChildren<{ uid: 
   } = useContactsContext();
   const {
     state: { groups },
-  } = useSharing();
+  } = useSharingGroups();
   useEffect(() => {
     model.start();
     return model.stop;
