@@ -79,6 +79,8 @@ Each auth page is an explicit View. `AuthFormLayout` supplies the common heading
 
 Reuse `SearchField` for search icons, focus styling, and keyboard-preserving clear actions; `SegmentedControl` for animated mutually exclusive tabs; and `ListEmptyState` for empty lists. `PrimaryButton` owns press feedback and reserves its label's dimensions while showing a loading indicator. Filtering stays in the feature layer, with deferred queries for responsive typing. Translation callbacks remain stable until the language changes, allowing translated lists to be memoized safely.
 
+Settings uses a prominent profile disclosure and a `SettingsGroup` for related preference rows. `SettingsSection` owns only disclosure state, accessible expanded/disabled states, and reduced-motion-aware transitions; profile, sharing, language, and password commands remain in their existing feature bindings. `SettingsSignOut` keeps the session action separate and shows progress in a fixed icon slot without shifting its label. Expanded forms stay in the scrollable screen above the persistent toolbar.
+
 Animation timings live in `shared/motion/tokens.ts`. Native routes use the native stack fade. Web uses a short exit/enter sequence. `PageSurface` stays opaque while only its content fades; reduced-motion settings disable page animation.
 
 ## Adding a field

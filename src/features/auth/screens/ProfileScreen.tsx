@@ -1,6 +1,6 @@
 import { DeveloperTesting } from '../../map/screens/DeveloperTesting';
 import { SharingSettings } from '../../contacts/screens/SharingSettings';
-import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
+import { SettingsSignOut } from '../../../shared/ui/SettingsSection';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { useMapSettings } from '../../map/bindings/useMapSettings';
 import { MapLanguageSettings } from '../../map/views/MapLanguageSettings';
@@ -63,8 +63,7 @@ function ProfileEditor({ user, sessionError }: { user: AuthUser; sessionError: s
         passwordBusy={password.state.busy}
         signOutSection={
           editing ? (
-            <PrimaryButton
-              variant="secondary"
+            <SettingsSignOut
               label={t('Sign out')}
               onPress={logout}
               busy={session.busy}

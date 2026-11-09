@@ -3,6 +3,13 @@ import { chatActionsCatalog } from './chatActionsCatalog';
 export const catalog: Record<string, readonly string[]> = {
   ...socialExperienceCatalog,
   ...chatActionsCatalog,
+  'Privacy & preferences': [
+    'Privacidad y preferencias',
+    'Confidentialité et préférences',
+    'Datenschutz & Einstellungen',
+    '隐私与偏好设置',
+    'プライバシーと設定',
+  ],
   'The map connection failed a date/time check. Enable automatic date and time on your device, then reload the map.':
     [
       'La conexión del mapa falló en la comprobación de fecha y hora. Activa la fecha y hora automáticas en tu dispositivo y vuelve a cargar el mapa.',

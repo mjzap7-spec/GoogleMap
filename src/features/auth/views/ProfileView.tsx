@@ -8,7 +8,7 @@ import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 import { Feedback } from '../../../shared/ui/Feedback';
 import { ui } from '../../../shared/ui/styles';
 import { Avatar } from '../../../shared/ui/Avatar';
-import { SettingsSection } from '../../../shared/ui/SettingsSection';
+import { SettingsGroup, SettingsSection } from '../../../shared/ui/SettingsSection';
 import { colors } from '../../../shared/theme/colors';
 import { AvatarField } from './components/AvatarField';
 import { BirthdayField } from './components/BirthdayField';
@@ -142,7 +142,11 @@ export function ProfileView({
           title={state.fullName || t('Your profile')}
           subtitle={email ?? t('Edit profile')}
           label={t('Edit profile')}
-          icon={<Avatar uri={state.avatarUrl} name={state.fullName} size={48} />}
+          variant="profile"
+          actionLabel={t('Edit profile')}
+          icon={
+            <Avatar uri={state.avatar?.uri ?? state.avatarUrl} name={state.fullName} size={64} />
+          }
           disabled={disabled}
         >
           {profileForm}
@@ -153,8 +157,14 @@ export function ProfileView({
           {profileForm}
         </>
       )}
-      {editing && settingsSection}
-      {passwordSection}
+      {editing ? (
+        <SettingsGroup title={t('Privacy & preferences')}>
+          {settingsSection}
+          {passwordSection}
+        </SettingsGroup>
+      ) : (
+        passwordSection
+      )}
       {developerSection}
       {signOutSection}
     </ScreenLayout>

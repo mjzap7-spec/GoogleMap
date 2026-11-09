@@ -20,7 +20,7 @@ export function MapLanguageSettings({
   return (
     <SettingsSection
       title={t('Language')}
-      subtitle={mapLanguages.find((item) => item.code === language)?.label}
+      value={mapLanguages.find((item) => item.code === language)?.label}
       label={t('Change app language')}
       icon={<SettingsSymbol kind="language" />}
     >
