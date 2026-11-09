@@ -23,11 +23,7 @@ export function ManageContactsView({
   const { t } = useTranslation();
   return (
     <View style={styles.screen}>
-      <ScreenHeader
-        onBack={onBack}
-        title={t('Contacts')}
-        count={tab === 'contacts' ? contacts.state.contacts.length : undefined}
-      />
+      <ScreenHeader onBack={onBack} title={t('Contacts')} />
       <View style={styles.body}>
         <View style={styles.tabs}>
           <SegmentedControl
@@ -54,15 +50,15 @@ export function ManageContactsView({
   );
 }
 const styles = StyleSheet.create({
-  tabs: { marginBottom: 16 },
+  tabs: { marginBottom: 18 },
   screen: { flex: 1, backgroundColor: colors.background },
   body: {
     flex: 1,
     width: '100%',
     maxWidth: 640,
     alignSelf: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 4,
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   panel: {
     flex: 1,

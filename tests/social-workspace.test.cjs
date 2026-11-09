@@ -2,6 +2,46 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { DismissalReceipts } = require('../.test-build/shared/feedback/DismissalReceipts');
 const { conversationList } = require('../.test-build/features/chat/models/conversations');
+
+test('chat filters preserve unread private members under their room without changing identities', () => {
+  const {
+    filterConversations,
+    visibleConversations,
+  } = require('../.test-build/features/chat/models/conversations');
+  const member = {
+    key: 'member:family:bob',
+    name: 'Bob',
+    unread: 2,
+    target: { groupId: 'family', memberId: 'bob' },
+  };
+  const rows = [
+    { key: 'contact:amy', name: 'Amy', unread: 1, target: { peerId: 'amy', requestId: 'req' } },
+    {
+      key: 'group:family',
+      name: 'Family',
+      unread: 0,
+      target: { groupId: 'family' },
+      members: [member, { ...member, key: 'other', unread: 0 }],
+    },
+    { key: 'group:quiet', name: 'Quiet', target: { groupId: 'quiet' } },
+  ];
+  const unread = filterConversations(rows, 'unread');
+  assert.deepEqual(
+    unread.map((r) => r.key),
+    ['contact:amy', 'group:family'],
+  );
+  assert.deepEqual(unread[1].members, [member]);
+  assert.equal(rows[1].members.length, 2, 'filter must not mutate the realtime source');
+  assert.equal(
+    visibleConversations(unread, 'family', '').find((r) => r.key === member.key).target,
+    member.target,
+  );
+  assert.deepEqual(
+    filterConversations(rows, 'groups').map((r) => r.key),
+    ['group:family', 'group:quiet'],
+  );
+  assert.deepEqual(filterConversations(rows, 'all'), rows);
+});
 test('a nested sender badge combines both private transcripts and opens the one with unread messages', () => {
   const {
     memberKey,

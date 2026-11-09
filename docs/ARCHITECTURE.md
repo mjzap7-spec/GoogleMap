@@ -190,3 +190,11 @@ ContactsProvider owns one ContactsViewModel per authenticated UID outside the ro
 ## Person-to-chat navigation
 
 Map user cards and contact chat buttons pass the person's UID to `openPersonChat`. The chat workspace waits for contact, membership, inbox, and relevant private-member activity snapshots before `personConversation` selects an accessible transcript: unread messages first, then the latest activity. The resolved selection stays fixed while reading, so live receipts or list reordering cannot switch conversations. Explicit group-room and member links keep their specified targets. History remains filtered by `DeviceChatRepository`, including messages deleted only on this device; navigation never copies or rewrites Firebase messages.
+
+## Social list presentation
+
+Contacts and Private groups keep creation beside the search/list controls using the shared `CollectionToolbar`. Full contact rows have distinct map, edit, and chat targets; the compact map dropdown retains its own Show all/New contact actions. `InlineRetry` associates a recoverable load failure with its list. Group metadata and membership remain live, while expansion and search are presentation state.
+
+The chat list offers All chats, Unread, and Private groups filters. `filterConversations` preserves canonical transcript identities and retains a group with unread private-member threads even when the group room itself is read. Filtering never changes the active conversation. The group disclosure button is a sibling of the conversation button, so expanding members cannot accidentally open the room. Lists remain virtualized; search is deferred and existing reduced-motion-aware transitions remain in use.
+
+`SharingViewModel` tracks membership and directory load failures separately from GPS/preferences/action failures. Each successful subscription clears only its own load failure. `useSharingGroups` exposes membership errors to Chats, so location publication failures cannot mark a healthy chat list as broken. Location failures continue to be reported in the sharing experience. Tests exercise independent recovery, stale subscription guards, and unread group-member filtering.

@@ -143,6 +143,55 @@ function fixture(overrides = {}) {
   };
 }
 
+test('group-list failures are isolated from GPS sharing errors and recover independently', () => {
+  let groupFailure, directoryFailure, groupNext, directoryNext, locationFailure;
+  const f = fixture({
+    observeGroups: (_, next, fail) => {
+      groupNext = next;
+      groupFailure = fail;
+      next([group]);
+      return () => {};
+    },
+    observeDirectory: (_, next, fail) => {
+      directoryNext = next;
+      directoryFailure = fail;
+      next([]);
+      return () => {};
+    },
+    observeLocations: (_, id, next, fail) => {
+      locationFailure = fail;
+      next([]);
+      return () => {};
+    },
+  });
+  try {
+    locationFailure(new Error('Location unavailable'));
+    assert.equal(f.model.getSnapshot().error, 'Location unavailable');
+    assert.equal(f.model.getSnapshot().membershipError, '');
+    assert.equal(f.model.getSnapshot().directoryError, '');
+    groupFailure(new Error('offline'));
+    directoryFailure(new Error('offline'));
+    assert.ok(f.model.getSnapshot().membershipError);
+    assert.ok(f.model.getSnapshot().directoryError);
+    assert.deepEqual(f.model.getSnapshot().groups, [group], 'keep useful cached membership rows');
+    groupNext([group]);
+    assert.equal(f.model.getSnapshot().membershipError, '');
+    assert.ok(
+      f.model.getSnapshot().directoryError,
+      'membership recovery cannot hide directory failure',
+    );
+    directoryNext([]);
+    assert.equal(f.model.getSnapshot().directoryError, '');
+    assert.equal(f.model.getSnapshot().error, 'Location unavailable');
+    const oldFailure = groupFailure;
+    f.model.start();
+    oldFailure(new Error('late old subscription'));
+    assert.equal(f.model.getSnapshot().membershipError, '');
+  } finally {
+    f.model.dispose();
+  }
+});
+
 test('stop all sharing cancels a trip immediately, survives a failed save and confirms a retry', async () => {
   let rejectSave, resolveSave;
   const saves = [];

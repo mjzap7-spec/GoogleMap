@@ -18,6 +18,8 @@ import { SearchField } from '../../../shared/ui/SearchField';
 import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 import { Avatar } from '../../../shared/ui/Avatar';
 import { GroupRowHeader } from './GroupRowHeader';
+import { CollectionToolbar } from '../../../shared/ui/CollectionToolbar';
+import { InlineRetry } from '../../../shared/ui/InlineRetry';
 import type { MemberConversation } from '../../chat/models/conversations';
 import { threadKey } from '../../chat/models/chat';
 import { ChatIcon } from '../../../shared/ui/ChatIcon';
@@ -140,6 +142,23 @@ export function PrivateGroupsView({
           returnKeyType="search"
         />
       </View>
+      <CollectionToolbar
+        title={t('Private groups')}
+        count={sections.reduce((total, section) => total + section.data.length, 0)}
+        action={t('Create group')}
+        disabled={state.busy}
+        onAction={() => {
+          commands.setName('');
+          setConfirming('');
+          setCreating(true);
+        }}
+      />
+      {!!(state.membershipError || state.directoryError) && (
+        <InlineRetry
+          message={state.membershipError || state.directoryError}
+          onRetry={commands.start}
+        />
+      )}
       <SectionList
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.list}
@@ -160,7 +179,8 @@ export function PrivateGroupsView({
         )}
         keyExtractor={(g) => g.id}
         ListEmptyComponent={
-          state.error ? undefined : !state.membershipsLoaded || !state.directoryLoaded ? (
+          state.membershipError || state.directoryError ? undefined : !state.membershipsLoaded ||
+            !state.directoryLoaded ? (
             <ActivityIndicator style={styles.empty} color={colors.accent} />
           ) : (
             <ListEmptyState
@@ -221,11 +241,7 @@ export function PrivateGroupsView({
                     </Pressable>
                   </View>
                   {rosterError && (
-                    <Pressable accessibilityRole="button" onPress={retryRoster}>
-                      <Text style={styles.hint}>
-                        {t('Could not load group members.')} · {t('Retry')}
-                      </Text>
-                    </Pressable>
+                    <InlineRetry message="Could not load group members." onRetry={retryRoster} />
                   )}
                   {members.map((person) => {
                     const id = person.target.memberId;
@@ -362,28 +378,7 @@ export function PrivateGroupsView({
             </View>
           );
         }}
-        ListFooterComponent={
-          <>
-            {!!state.error && (
-              <Pressable accessibilityRole="button" onPress={commands.start} style={styles.button}>
-                <Text style={styles.action}>{t('Retry')}</Text>
-              </Pressable>
-            )}
-          </>
-        }
       />
-      <View style={styles.createAction}>
-        <PrimaryButton
-          label={t('Create private group')}
-          busy={false}
-          disabled={state.busy}
-          onPress={() => {
-            commands.setName('');
-            setConfirming('');
-            setCreating(true);
-          }}
-        />
-      </View>
     </>
   );
 }
@@ -397,10 +392,10 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
   },
-  sectionTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  sectionTitle: { color: colors.muted, fontSize: 12, fontWeight: '600' },
   sectionCount: {
-    color: colors.accent,
-    backgroundColor: '#BCB5FF18',
+    color: colors.muted,
+    backgroundColor: '#FFFFFF08',
     borderRadius: 9,
     overflow: 'hidden',
     fontSize: 12,
@@ -409,25 +404,36 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   empty: { paddingVertical: 20, textAlign: 'center' },
-  groupCard: { paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10, borderRadius: 18 },
+  groupCard: { paddingHorizontal: 14, paddingVertical: 16, marginBottom: 12, borderRadius: 22 },
   content: { gap: 16, paddingBottom: 20 },
-  createAction: { paddingTop: 4, paddingBottom: 12 },
   card: {
     padding: 18,
     gap: 14,
     backgroundColor: colors.input,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#282B36',
     borderRadius: 24,
   },
-  selected: { borderColor: colors.accent },
+  selected: { borderColor: '#BCB5FF66', backgroundColor: '#1C1D29' },
   identity: { flex: 1 },
   name: { color: colors.text, fontSize: 15, fontWeight: '600' },
   hint: { color: colors.muted, fontSize: 12, lineHeight: 20 },
   action: { color: colors.accent, fontWeight: '600', fontSize: 14 },
   confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
   button: { minHeight: 44, minWidth: 48, justifyContent: 'center', alignItems: 'center' },
-  groupChatButton: { flexDirection: 'row', gap: 8, paddingHorizontal: 8 },
-  member: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56 },
+  groupChatButton: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#BCB5FF12',
+  },
+  member: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 56,
+    paddingVertical: 4,
+  },
   destructive: { color: '#ffb4be', fontSize: 13 },
 });

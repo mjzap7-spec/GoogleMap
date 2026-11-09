@@ -35,7 +35,11 @@ export const ConversationRow = memo(function ConversationRow({
   const disclosure = useChatProgress(expanded ? 1 : 0);
   const press = useChatPress();
   return (
-    <Animated.View style={[s.container, press.style]}>
+    <Animated.View style={[s.container, s.surface, member && !compact && s.member, press.style]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, s.selected, { opacity: selection }]}
+      />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={chatButtonLabel(
@@ -47,13 +51,8 @@ export const ConversationRow = memo(function ConversationRow({
         onPress={() => onSelect(selectConversation(item))}
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
-        style={[s.row, compact ? s.compact : s.wide, member && !compact && s.member]}
+        style={[s.row, compact ? s.compact : s.wide]}
       >
-        <Animated.View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, s.selected, { opacity: selection }]}
-        />
-        <Animated.View pointerEvents="none" style={[s.indicator, { opacity: selection }]} />
         <View>
           {room ? (
             <View style={s.groupIcon}>
@@ -79,7 +78,7 @@ export const ConversationRow = memo(function ConversationRow({
               )}
             </View>
           ) : (
-            <Avatar uri={item.avatarUrl} name={name} size={compact ? 42 : 48} />
+            <Avatar uri={item.avatarUrl} name={name} size={compact ? 42 : member ? 42 : 50} />
           )}
           {compact && <UnreadBadge count={unread} />}
         </View>
@@ -105,64 +104,64 @@ export const ConversationRow = memo(function ConversationRow({
             <UnreadBadge count={unread} inline />
           </View>
         )}
-        {room && onToggleMembers && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t(expanded ? 'Hide group members' : 'Show group members')}
-            accessibilityState={{ expanded }}
-            onPress={(event) => {
-              event.stopPropagation();
-              onToggleMembers();
-            }}
-            style={s.toggle}
-          >
-            <Animated.View
-              style={[
-                s.chevron,
-                {
-                  transform: [
-                    {
-                      rotate: disclosure.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ['-45deg', '45deg'],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            />
-          </Pressable>
-        )}
       </Pressable>
+      {room && onToggleMembers && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t(expanded ? 'Hide group members' : 'Show group members')}
+          accessibilityState={{ expanded }}
+          onPress={(event) => {
+            event.stopPropagation();
+            onToggleMembers();
+          }}
+          style={s.toggle}
+        >
+          <Animated.View
+            style={[
+              s.chevron,
+              {
+                transform: [
+                  {
+                    rotate: disclosure.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['-45deg', '45deg'],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        </Pressable>
+      )}
     </Animated.View>
   );
 });
 
 const s = StyleSheet.create({
-  container: { marginHorizontal: 10, marginVertical: 2 },
+  container: {
+    marginHorizontal: 20,
+    marginBottom: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#272A35',
+  },
+  surface: { backgroundColor: colors.input },
   row: { alignItems: 'center', gap: 7, padding: 8, borderRadius: 16 },
   compact: { paddingVertical: 11, minHeight: 84 },
-  wide: { flexDirection: 'row', minHeight: 78, gap: 12, padding: 12 },
-  member: { marginLeft: 12 },
+  wide: { flex: 1, minWidth: 0, flexDirection: 'row', minHeight: 86, gap: 12, padding: 14 },
+  member: { marginLeft: 36, backgroundColor: '#15171F', borderColor: '#232630' },
   selected: {
     backgroundColor: '#BCB5FF18',
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#BCB5FF28',
   },
-  indicator: {
-    position: 'absolute',
-    left: 0,
-    width: 3,
-    height: 22,
-    borderRadius: 2,
-    backgroundColor: colors.accent,
-    top: '34%',
-  },
   groupIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
+    width: 50,
+    height: 50,
+    borderRadius: 18,
     backgroundColor: '#BCB5FF16',
     alignItems: 'center',
     justifyContent: 'center',
@@ -186,14 +185,20 @@ const s = StyleSheet.create({
     borderBottomWidth: 1.5,
     borderColor: colors.accent,
   },
-  identity: { flex: 1, gap: 4 },
-  name: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  identity: { flex: 1, minWidth: 0, gap: 5 },
+  name: { color: colors.text, fontSize: 16, fontWeight: '600' },
   small: { fontSize: 11, lineHeight: 14, textAlign: 'center' },
   selectedName: { color: '#E7E3FF' },
   unreadName: { fontWeight: '700' },
   unreadTime: { color: colors.accent },
-  metadata: { alignItems: 'flex-end', alignSelf: 'stretch', justifyContent: 'center', gap: 6 },
-  preview: { color: colors.muted, fontSize: 13 },
+  metadata: {
+    alignItems: 'flex-end',
+    alignSelf: 'stretch',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+    gap: 6,
+  },
+  preview: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   time: { color: colors.muted, fontSize: 11, fontVariant: ['tabular-nums'] },
   toggle: {
     width: 44,
@@ -201,5 +206,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
+    marginRight: 6,
+    backgroundColor: '#FFFFFF04',
   },
 });

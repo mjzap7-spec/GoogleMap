@@ -10,7 +10,8 @@ import type { ContactsState, ContactsViewModel } from '../viewmodels/ContactsVie
 import { SearchField } from '../../../shared/ui/SearchField';
 import { ListEmptyState } from '../../../shared/ui/ListEmptyState';
 import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
-import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
+import { CollectionToolbar } from '../../../shared/ui/CollectionToolbar';
+import { InlineRetry } from '../../../shared/ui/InlineRetry';
 import { colors } from '../../../shared/theme/colors';
 export interface ContactsPanelProps {
   state: Readonly<ContactsState>;
@@ -92,17 +93,18 @@ export const ContactsPanel = memo(function ContactsPanel({
           )}
         </Pressable>
       </View>
+      {fill && (
+        <CollectionToolbar
+          title={t('Your contacts')}
+          count={filteredContacts.length}
+          action={t('New contact')}
+          onAction={commands.openForm}
+        />
+      )}
       {state.loading && (
         <ActivityIndicator color={colors.accent} accessibilityLabel={t('Loading contacts')} />
       )}
-      {!!state.loadError && (
-        <>
-          <Text style={styles.error}>{t(state.loadError)}</Text>
-          <Pressable accessibilityRole="button" onPress={commands.retry} style={styles.action}>
-            <Text style={styles.accent}>{t('Retry')}</Text>
-          </Pressable>
-        </>
-      )}
+      {!!state.loadError && <InlineRetry message={state.loadError} onRetry={commands.retry} />}
       <FlatList
         style={fill ? { flex: 1 } : { maxHeight: listHeight, minHeight: 0, flexShrink: 1 }}
         data={filteredContacts}
@@ -129,7 +131,7 @@ export const ContactsPanel = memo(function ContactsPanel({
           const count = chat?.unread ?? 0;
           const chatLabel = t('Chat with {name}', { name: contact.name });
           return (
-            <View style={styles.row}>
+            <View style={[styles.row, fill && styles.contactCard]}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t('Show {name} on map', { name: contact.name })}
@@ -142,7 +144,7 @@ export const ContactsPanel = memo(function ContactsPanel({
                 style={({ pressed }) => [styles.person, pressed && styles.pressed]}
               >
                 <View>
-                  <Avatar uri={contact.avatarUrl} name={contact.name} size={40} />
+                  <Avatar uri={contact.avatarUrl} name={contact.name} size={fill ? 48 : 40} />
                   <UnreadBadge count={count} />
                 </View>
                 <Text style={styles.name} numberOfLines={1}>
@@ -156,7 +158,11 @@ export const ContactsPanel = memo(function ContactsPanel({
                 accessibilityRole="button"
                 accessibilityLabel={t('Edit {name}', { name: contact.name })}
                 onPress={() => onEdit(contact)}
-                style={({ pressed }) => [styles.edit, pressed && styles.pressed]}
+                style={({ pressed }) => [
+                  styles.edit,
+                  fill && styles.editSurface,
+                  pressed && styles.pressed,
+                ]}
               >
                 <EditIcon />
               </Pressable>
@@ -168,6 +174,7 @@ export const ContactsPanel = memo(function ContactsPanel({
                 onPress={() => onChat(contact)}
                 style={({ pressed }) => [
                   styles.edit,
+                  fill && styles.chatSurface,
                   !chat && { opacity: 0.45 },
                   pressed && styles.pressed,
                 ]}
@@ -178,24 +185,28 @@ export const ContactsPanel = memo(function ContactsPanel({
           );
         }}
       />
-      <View style={onShowAll ? styles.dropdownActions : styles.fullActions}>
-        {onShowAll && (
-          <Pressable accessibilityRole="button" onPress={onShowAll} style={styles.showAll}>
-            <Text style={styles.accent}>{t('Show all')}</Text>
-          </Pressable>
-        )}
-        {onShowAll ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={commands.openForm}
-            style={({ pressed }) => [styles.add, styles.dropdownAdd, pressed && styles.pressed]}
-          >
-            <Text style={styles.accent}>{t('+ New contact')}</Text>
-          </Pressable>
-        ) : (
-          <PrimaryButton label={t('+ New contact')} busy={false} onPress={commands.openForm} />
-        )}
-      </View>
+      {!fill && (
+        <View style={styles.dropdownActions}>
+          {onShowAll && (
+            <Pressable accessibilityRole="button" onPress={onShowAll} style={styles.showAll}>
+              <Text style={styles.accent}>{t('Show all')}</Text>
+            </Pressable>
+          )}
+          {onShowAll ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={commands.openForm}
+              style={({ pressed }) => [styles.add, styles.dropdownAdd, pressed && styles.pressed]}
+            >
+              <Text style={styles.accent}>{t('+ New contact')}</Text>
+            </Pressable>
+          ) : (
+            <Pressable accessibilityRole="button" onPress={commands.openForm} style={styles.add}>
+              <Text style={styles.accent}>{t('+ New contact')}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
     </View>
   );
 });
@@ -214,7 +225,6 @@ const styles = StyleSheet.create({
   },
   search: { position: 'relative', flex: 1 },
   dropdownActions: { flexDirection: 'row', alignItems: 'stretch', gap: 8, marginTop: 8 },
-  fullActions: { marginTop: 12 },
   dropdownAdd: { flex: 1 },
   showAll: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   badge: {
@@ -238,6 +248,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
+  contactCard: {
+    backgroundColor: colors.input,
+    borderWidth: 1,
+    borderColor: '#282B36',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 10,
+    gap: 6,
+  },
+  editSurface: { backgroundColor: '#242632', borderRadius: 14 },
+  chatSurface: { backgroundColor: '#BCB5FF18', borderRadius: 14 },
   person: {
     flex: 1,
     minWidth: 0,
@@ -247,17 +269,8 @@ const styles = StyleSheet.create({
     gap: 10,
     borderRadius: 12,
   },
-  name: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '500' },
+  name: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '600' },
   accent: { color: colors.accent, fontSize: 14, fontWeight: '600' },
-  muted: { color: colors.muted, lineHeight: 22 },
-  error: { color: '#ffb4be', lineHeight: 22 },
-  action: {
-    minHeight: 44,
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   edit: {
     borderRadius: 10,
     minWidth: 44,

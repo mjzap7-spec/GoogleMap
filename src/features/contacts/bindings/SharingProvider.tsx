@@ -64,7 +64,7 @@ export function useSharing() {
 const selectGroups = (state: Readonly<SharingState>) => ({
   groups: state.groups,
   membershipsLoaded: state.membershipsLoaded,
-  error: state.error,
+  error: state.membershipError,
 });
 const sameGroups = (a: ReturnType<typeof selectGroups>, b: ReturnType<typeof selectGroups>) =>
   a.groups === b.groups && a.membershipsLoaded === b.membershipsLoaded && a.error === b.error;

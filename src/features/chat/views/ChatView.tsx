@@ -17,12 +17,15 @@ import { ScreenHeader } from '../../../shared/ui/ScreenHeader';
 import { SearchField } from '../../../shared/ui/SearchField';
 import {
   visibleConversations,
+  filterConversations,
+  type ConversationFilter,
   type Conversation,
   type ChatSelection,
 } from '../models/conversations';
 import { useLayoutMotion } from '../../../shared/motion/useLayoutMotion';
 import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
-import { ChatIcon } from '../../../shared/ui/ChatIcon';
+import { ChatIcon, EditIcon } from '../../../shared/ui/ChatIcon';
+import { InlineRetry } from '../../../shared/ui/InlineRetry';
 import type { PrivateGroup } from '../../contacts/models/sharing';
 import { ConversationRow } from './ConversationRow';
 import { useConversationMotion } from './chatMotion';
@@ -69,13 +72,20 @@ export function ChatView({
     [language],
   );
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<ConversationFilter>('all');
   // Folding a roster is local UI state, independent of the open conversation.
   const [collapsedGroupId, setCollapsedGroupId] = useState<string>();
   const expandedGroupId = expandedGroup?.id === collapsedGroupId ? undefined : expandedGroup?.id;
   const term = useDeferredValue(search.trim().toLocaleLowerCase());
   const filtered = useMemo(
-    () => visibleConversations(rows, expandedGroupId, term, collapsedGroupId),
-    [rows, term, expandedGroupId, collapsedGroupId],
+    () =>
+      visibleConversations(
+        filterConversations(rows, filter),
+        expandedGroupId,
+        term,
+        collapsedGroupId,
+      ),
+    [rows, filter, term, expandedGroupId, collapsedGroupId],
   );
   const openRosters = useMemo(
     () =>
@@ -161,28 +171,61 @@ export function ChatView({
         {compact && !showingList ? conversationHeader : null}
       </ScreenHeader>
       {(!compact || showingList) && (
-        <View style={s.searchRow}>
-          <SearchField
-            accessibilityLabel={t('Search chats')}
-            placeholder={t('Search chats')}
-            value={search}
-            onChangeText={setSearch}
-          />
+        <View style={s.listTools}>
+          <View style={s.searchRow}>
+            <View style={s.searchInput}>
+              <SearchField
+                accessibilityLabel={t('Search chats')}
+                placeholder={t('Search chats')}
+                value={search}
+                onChangeText={setSearch}
+              />
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('New message')}
+              onPress={onContacts}
+              style={({ pressed }) => [s.compose, pressed && { opacity: 0.65 }]}
+            >
+              <EditIcon />
+            </Pressable>
+          </View>
+          <View style={s.filters}>
+            {(
+              [
+                ['all', 'All chats'],
+                ['unread', 'Unread'],
+                ['groups', 'Private groups'],
+              ] as const
+            ).map(([value, label]) => (
+              <Pressable
+                key={value}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: filter === value }}
+                onPress={() => setFilter(value)}
+                style={({ pressed }) => [
+                  s.filter,
+                  filter === value && s.filterSelected,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={[s.filterLabel, filter === value && s.filterActive]}>{t(label)}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
       )}
       {!!error && (
-        <Pressable accessibilityRole="button" style={s.error} onPress={onRetry}>
-          <Text style={s.hint}>
-            {t(error)} · {t('Retry')}
-          </Text>
-        </Pressable>
+        <View style={s.error}>
+          <InlineRetry message={error} onRetry={onRetry} />
+        </View>
       )}
       <View style={s.panes}>
         <Animated.FlatList<Conversation>
           style={[
             s.sidebar,
             compact && listMotion,
-            compact ? s.phoneList : { width: 276 },
+            compact ? s.phoneList : s.tabletList,
             compact && !showingList && s.hidden,
           ]}
           contentContainerStyle={[s.sidebarContent, !filtered.length && s.emptyList]}
@@ -202,7 +245,15 @@ export function ChatView({
                 <View style={s.emptyIcon}>
                   <ChatIcon unread={0} />
                 </View>
-                <Text style={s.empty}>{t(search ? 'No matches' : 'Choose a conversation')}</Text>
+                <Text style={s.empty}>
+                  {t(
+                    search
+                      ? 'No matches'
+                      : filter === 'unread'
+                        ? 'You’re all caught up'
+                        : 'Choose a conversation',
+                  )}
+                </Text>
                 {!search && (
                   <Pressable accessibilityRole="button" onPress={onContacts} style={s.link}>
                     <Text style={s.accent}>{t('Contacts')}</Text>
@@ -289,12 +340,39 @@ export function ChatView({
 }
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  searchRow: { marginHorizontal: 16, marginTop: 4, marginBottom: 12, justifyContent: 'center' },
+  listTools: {
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  searchInput: { flex: 1, minWidth: 0 },
+  compose: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#BCB5FF20',
+    borderWidth: 1,
+    borderColor: '#BCB5FF30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingTop: 12, paddingBottom: 14 },
+  filter: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 13,
+  },
+  filterSelected: { backgroundColor: '#BCB5FF1B' },
+  filterLabel: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+  filterActive: { color: colors.accent },
   panes: {
     flex: 1,
     flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
   },
   sidebar: {
     flexGrow: 0,
@@ -303,7 +381,13 @@ const s = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  sidebarContent: { paddingTop: 6, paddingBottom: 16 },
+  sidebarContent: {
+    paddingTop: 2,
+    paddingBottom: 20,
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
+  },
   emptyList: { flexGrow: 1, justifyContent: 'center' },
   emptyState: { alignItems: 'center', padding: 24, gap: 8 },
   emptyIcon: {
@@ -316,6 +400,7 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
   phoneList: { flex: 1, flexGrow: 1, borderRightWidth: 0, backgroundColor: colors.background },
+  tabletList: { width: '40%', minWidth: 320, maxWidth: 400 },
   hidden: { display: 'none' },
   peopleButton: {
     width: 44,
@@ -369,5 +454,5 @@ const s = StyleSheet.create({
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 10 },
   link: { minHeight: 44, justifyContent: 'center' },
   accent: { color: colors.accent },
-  error: { padding: 10 },
+  error: { paddingHorizontal: 20, width: '100%', maxWidth: 760, alignSelf: 'center' },
 });

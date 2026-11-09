@@ -3,6 +3,36 @@ import { chatActionsCatalog } from './chatActionsCatalog';
 export const catalog: Record<string, readonly string[]> = {
   ...socialExperienceCatalog,
   ...chatActionsCatalog,
+  'Your contacts': ['Tus contactos', 'Vos contacts', 'Deine Kontakte', '你的联系人', '連絡先'],
+  'Create group': [
+    'Crear grupo',
+    'Créer un groupe',
+    'Gruppe erstellen',
+    '创建群组',
+    'グループを作成',
+  ],
+  'New message': [
+    'Nuevo mensaje',
+    'Nouveau message',
+    'Neue Nachricht',
+    '新消息',
+    '新しいメッセージ',
+  ],
+  Unread: ['No leídos', 'Non lus', 'Ungelesen', '未读', '未読'],
+  'You’re all caught up': [
+    'Estás al día',
+    'Vous êtes à jour',
+    'Du bist auf dem neuesten Stand',
+    '没有未读消息',
+    '未読メッセージはありません',
+  ],
+  'Could not load groups. Please retry.': [
+    'No se pudieron cargar los grupos. Inténtalo de nuevo.',
+    'Impossible de charger les groupes. Réessayez.',
+    'Gruppen konnten nicht geladen werden. Bitte erneut versuchen.',
+    '无法加载群组，请重试。',
+    'グループを読み込めませんでした。再試行してください。',
+  ],
   'Privacy & preferences': [
     'Privacidad y preferencias',
     'Confidentialité et préférences',

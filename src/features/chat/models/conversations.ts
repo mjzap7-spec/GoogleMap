@@ -15,6 +15,19 @@ export interface Conversation {
     | { peerId: string; requestId: string }
     | { groupId: string; memberId: string };
 }
+export type ConversationFilter = 'all' | 'unread' | 'groups';
+/** Filter presentation rows without changing transcript identities or selection. */
+export function filterConversations(
+  rows: readonly Conversation[],
+  filter: ConversationFilter,
+): Conversation[] {
+  if (filter === 'all') return [...rows];
+  if (filter === 'groups') return rows.filter((row) => 'groupId' in row.target);
+  return rows.flatMap((row) => {
+    const members = row.members?.filter((member) => (member.unread ?? 0) > 0);
+    return (row.unread ?? 0) > 0 || members?.length ? [{ ...row, members }] : [];
+  });
+}
 export function memberKey(groupId: string, memberId: string) {
   return threadKey({ groupId, memberId });
 }

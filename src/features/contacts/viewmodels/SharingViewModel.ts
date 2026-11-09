@@ -20,6 +20,8 @@ export interface SharingState {
   groups: PrivateGroup[];
   membershipsLoaded: boolean;
   directoryLoaded: boolean;
+  membershipError: string;
+  directoryError: string;
   directory: DirectoryGroup[];
   selectedId: string;
   locations: GroupLocation[];
@@ -62,6 +64,8 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
       groups: [],
       membershipsLoaded: false,
       directoryLoaded: false,
+      membershipError: '',
+      directoryError: '',
       directory: [],
       selectedId: '',
       locations: [],
@@ -84,7 +88,14 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
     if (this.state.busy) return;
     this.stops.forEach((stop) => stop());
     this.stopLocationFeeds();
-    this.update({ error: '', selectedId: '', locations: [], focus: null });
+    this.update({
+      error: '',
+      membershipError: '',
+      directoryError: '',
+      selectedId: '',
+      locations: [],
+      focus: null,
+    });
     const version = ++this.generation;
     if (!this.repository) return;
     const error = (reason: unknown) => {
@@ -94,9 +105,13 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
       this.repository.observeDirectory(
         this.user.id,
         (directory) => {
-          if (version === this.generation) this.update({ directory, directoryLoaded: true });
+          if (version === this.generation)
+            this.update({ directory, directoryLoaded: true, directoryError: '' });
         },
-        error,
+        () => {
+          if (version === this.generation)
+            this.update({ directoryError: 'Could not load groups. Please retry.' });
+        },
       ),
       this.repository.observePreferences(
         this.user.id,
@@ -115,7 +130,7 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
         this.user.id,
         (groups) => {
           if (version !== this.generation) return;
-          this.update({ groups, membershipsLoaded: true });
+          this.update({ groups, membershipsLoaded: true, membershipError: '' });
           this.syncLocationFeeds(groups);
           if (
             !groups.some(
@@ -134,7 +149,10 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
             this.endTrip();
           this.queue();
         },
-        error,
+        () => {
+          if (version === this.generation)
+            this.update({ membershipError: 'Could not load groups. Please retry.' });
+        },
       ),
     ];
     clearInterval(this.timer);
