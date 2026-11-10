@@ -45,6 +45,7 @@ Existing name-only contacts remain private legacy records. They can be renamed o
 ## Data and permissions
 
 - users/{uid}: private profile; readable by its owner and mutually accepted contacts, writable only by its owner.
+- users/{uid}/private/phone: optional phone number, readable and writable only by its owner. It is never copied to contact, group, chat, or map documents. Publish the updated rules before saving a phone number; leaving it blank on first setup does not create this document.
 - users/{uid}/contacts/{peerId}: nickname and relationship metadata. New linked contacts can only be created by the recipient as part of atomic acceptance; updates change only the owner's nickname; removal requires both links to be removed.
 - contactDirectory/{normalizedEmail}: exact email lookup containing UID, display name, and avatar. Authenticated direct lookups are allowed; directory scans are denied.
 - contactRequests/{senderUid}_{recipientUid}: participants-only request, with the sender's Auth email and profile name validated by rules. Acceptance requires both contacts in the same transaction.

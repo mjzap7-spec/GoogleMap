@@ -41,6 +41,14 @@ service cloud.firestore {
    }
    allow create: if own(userId) && validProfile() && request.resource.data.createdAt == request.time;
    allow update: if own(userId) && validProfile() && request.resource.data.createdAt == resource.data.createdAt;
+   match /private/{detailId} {
+    allow get, delete: if own(userId) && detailId == 'phone';
+    allow create, update: if own(userId) && detailId == 'phone'
+     && request.resource.data.keys().hasAll(['phoneNumber'])
+     && request.resource.data.keys().hasOnly(['phoneNumber'])
+     && request.resource.data.phoneNumber is string
+     && (request.resource.data.phoneNumber == '' || request.resource.data.phoneNumber.matches('^[+]?[0-9]{7,15}$'));
+   }
    match /preferences/{preferenceId} {
     allow read: if own(userId);
     allow create, update: if own(userId) && preferenceId == 'sharing'
