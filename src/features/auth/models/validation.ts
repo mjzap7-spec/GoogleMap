@@ -1,4 +1,5 @@
 import type { AuthForm, AuthMode, UserProfile } from './auth';
+import { validatePhoneNumber } from './phoneNumber';
 export function validateAuthForm(mode: AuthMode, form: AuthForm): string | null {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
     return 'Please enter a valid email address.';
@@ -26,6 +27,8 @@ export function validateProfile(form: UserProfile, today = new Date()): string |
     return 'Enter a valid birthday between 1900 and today.';
   if (!form.location.trim() || form.location.trim().length > 120)
     return 'Enter your location (up to 120 characters).';
+  const phoneError = validatePhoneNumber(form.phoneNumber);
+  if (phoneError) return phoneError;
   if (
     form.avatar &&
     (!form.avatar.base64 ||

@@ -90,6 +90,7 @@ export function observeFirebaseSession(
               fullName: typeof profile?.fullName === 'string' ? profile.fullName : base.fullName,
               birthday: typeof profile?.birthday === 'string' ? profile.birthday : undefined,
               location: typeof profile?.location === 'string' ? profile.location : undefined,
+              phoneNumber: latest.phoneNumber,
               avatarUrl:
                 profile?.avatarUrl === null
                   ? null
@@ -122,9 +123,27 @@ export function observeFirebaseSession(
             }
           },
         );
+        const unsubscribePhone = onSnapshot(
+          doc(getFirestore(getFirebaseApp()), 'users', user.uid, 'private', 'phone'),
+          { includeMetadataChanges: true },
+          (snapshot) => {
+            if (!active || current !== version) return;
+            const phone = snapshot.data();
+            if (!phone && snapshot.metadata?.fromCache) return;
+            const phoneNumber = typeof phone?.phoneNumber === 'string' ? phone.phoneNumber : '';
+            if (latest.phoneNumber === phoneNumber) return;
+            latest = { ...latest, phoneNumber };
+            onChange(latest);
+          },
+          () => {
+            // Optional details must not delay profile completion or offline startup.
+            // Undefined means unread: the editor leaves the stored number untouched.
+          },
+        );
         stopProfile = () => {
           clearTimeout(timeout);
           unsubscribeProfile();
+          unsubscribePhone();
         };
       },
       (error) => {

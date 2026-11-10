@@ -6,7 +6,8 @@ import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import React, { memo, useDeferredValue, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, FlatList, StyleSheet, Text, View } from 'react-native';
 import type { Contact } from '../models/contact';
-import type { ContactsState, ContactsViewModel } from '../viewmodels/ContactsViewModel';
+import type { ContactsViewModel } from '../viewmodels/ContactsViewModel';
+import type { ContactListState } from '../viewmodels/contactSelectors';
 import { SearchField } from '../../../shared/ui/SearchField';
 import { ListEmptyState } from '../../../shared/ui/ListEmptyState';
 import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
@@ -14,7 +15,7 @@ import { CollectionToolbar } from '../../../shared/ui/CollectionToolbar';
 import { InlineRetry } from '../../../shared/ui/InlineRetry';
 import { colors } from '../../../shared/theme/colors';
 export interface ContactsPanelProps {
-  state: Readonly<ContactsState>;
+  state: Readonly<ContactListState>;
   commands: Pick<
     ContactsViewModel,
     | 'selectMapUser'

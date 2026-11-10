@@ -6,12 +6,14 @@ import { openPersonChat } from '../../chat/screens/openPersonChat';
 import { useSharingGroups } from '../bindings/SharingProvider';
 import React, { useRef, useEffect } from 'react';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
-import { useContactsContext } from '../bindings/ContactsProvider';
+import { useContactsSelection } from '../bindings/ContactsProvider';
+import { selectContactList } from '../viewmodels/contactSelectors';
+import { shallowEqual } from '../../../shared/mvvm/shallowEqual';
 import { ManageContactsView } from '../views/ManageContactsView';
 import { PageSurface } from '../../../shared/motion/PageSurface';
 import { usePageTransition } from '../../../shared/motion/usePageTransition';
 export function ManageContactsScreen() {
-  const { state, commands, model } = useContactsContext();
+  const { state, commands, model } = useContactsSelection(selectContactList, shallowEqual);
   const map = useMapViewModel();
   const { section } = useLocalSearchParams<{ section?: string }>();
   const sharing = useSharingGroups();

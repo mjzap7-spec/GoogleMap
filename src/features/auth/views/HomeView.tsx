@@ -18,6 +18,7 @@ import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
 import { Feedback } from '../../../shared/ui/Feedback';
 import { HomeDropdown } from './components/HomeDropdown';
 import { ContactsPanel, type ContactsPanelProps } from '../../contacts/views/ContactsPanel';
+import type { ContactsState } from '../../contacts/viewmodels/ContactsViewModel';
 import { MapCanvas } from '../../map/views/MapCanvas';
 import { MapPeoplePicker } from '../../map/views/MapPeoplePicker';
 import type { MapCanvasProps, MapUserMarker } from '../../map/models/map';
@@ -41,7 +42,7 @@ export function HomeView({
   onStopTrip?: () => void;
   onFollowTrip: (id: string) => void;
   error: string;
-  contacts: ContactsPanelProps;
+  contacts: ContactsPanelProps & { state: Readonly<ContactsState> };
   map: MapCanvasProps;
   peopleFilter: MapPeopleFilter;
   onPeopleFilter: (value: MapPeopleFilter) => void;

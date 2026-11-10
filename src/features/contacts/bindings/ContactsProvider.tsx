@@ -5,21 +5,27 @@ import React, {
   useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
   type PropsWithChildren,
 } from 'react';
 import { Keyboard } from 'react-native';
 import type { AuthUser } from '../../auth/models/auth';
 import { useAuthDependencies } from '../../auth/bindings/AuthProvider';
-import type { ContactsViewModel } from '../viewmodels/ContactsViewModel';
+import type { ContactsState, ContactsViewModel } from '../viewmodels/ContactsViewModel';
 import { useMapViewModel } from '../../map/bindings/MapProvider';
+import type { MapState } from '../../map/models/map';
+import { useViewModelSelection } from '../../../shared/mvvm/useViewModelSelection';
+import { shallowEqual } from '../../../shared/mvvm/shallowEqual';
+const selectPosition = (state: Readonly<MapState>) => ({
+  live: state.live,
+  tracking: state.tracking,
+});
+const selectState = (state: Readonly<ContactsState>) => state;
 function useContactsModel(user: AuthUser) {
   const { createContacts } = useAuthDependencies();
   const [model] = useState(() => createContacts(user.id));
   useActionNotices(model);
-  const state = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
   const map = useMapViewModel();
-  const mapState = useSyncExternalStore(map.subscribe, map.getSnapshot, map.getSnapshot);
+  const mapState = useViewModelSelection(map, selectPosition, shallowEqual);
   const profileSyncPending = user.profileSyncPending === true;
   useEffect(() => {
     if (profileSyncPending) return;
@@ -60,7 +66,8 @@ function useContactsModel(user: AuthUser) {
     }),
     [model],
   );
-  return useMemo(() => ({ state, commands, model }), [state, commands, model]);
+  // Context contains stable services only; each screen selects the state it displays.
+  return useMemo(() => ({ commands, model }), [commands, model]);
 }
 type Value = ReturnType<typeof useContactsModel>;
 const Context = createContext<Value | null>(null);
@@ -68,9 +75,20 @@ export function ContactsProvider({ user, children }: PropsWithChildren<{ user: A
   const value = useContactsModel(user);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
-export function useContactsContext() {
+export function useContactsModelContext() {
   const value = useContext(Context);
   if (!value) throw new Error('ContactsProvider is required.');
   return value;
+}
+export function useContactsSelection<Selection>(
+  select: (state: Readonly<ContactsState>) => Selection,
+  equal?: (previous: Selection, next: Selection) => boolean,
+) {
+  const value = useContactsModelContext();
+  const state = useViewModelSelection(value.model, select, equal);
+  return { ...value, state };
+}
+export function useContactsContext() {
+  return useContactsSelection(selectState);
 }
 export type ContactCommands = Pick<ContactsViewModel, 'setPosition'>;

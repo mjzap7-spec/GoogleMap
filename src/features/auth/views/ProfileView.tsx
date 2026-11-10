@@ -18,6 +18,7 @@ type Commands = Pick<
   ProfileViewModel,
   | 'setFullName'
   | 'setBirthday'
+  | 'setPhoneNumber'
   | 'setCityQuery'
   | 'selectCity'
   | 'removeAvatar'
@@ -121,6 +122,21 @@ export function ProfileView({
         <Text accessibilityRole="alert" style={styles.hint}>
           {t(state.locationError)}
         </Text>
+      )}
+      <FormField
+        label={t('Phone number (optional)')}
+        placeholder={t('Add a phone number')}
+        value={state.phoneNumber}
+        onChangeText={commands.setPhoneNumber}
+        keyboardType="phone-pad"
+        autoComplete="tel"
+        autoCapitalize="none"
+        autoCorrect={false}
+        maxLength={32}
+        editable={!disabled}
+      />
+      {!editing && (
+        <Text style={styles.hint}>{t('You can leave this blank and add it later.')}</Text>
       )}
       <Feedback source="profile" error={state.error || sessionError} />
       <PrimaryButton

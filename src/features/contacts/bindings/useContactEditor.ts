@@ -1,10 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useAuthDependencies } from '../../auth/bindings/AuthProvider';
-import { useContactsContext } from './ContactsProvider';
+import { useContactsModelContext } from './ContactsProvider';
 import type { Contact } from '../models/contact';
 export function useContactEditor(userId: string, contactId: string) {
   const { createContactEditor } = useAuthDependencies();
-  const { model: contacts } = useContactsContext();
+  const { model: contacts } = useContactsModelContext();
   const [model] = useState(() =>
     createContactEditor(userId, contactId, (_, next, error) => {
       let previous: Contact | undefined;

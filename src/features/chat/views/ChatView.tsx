@@ -87,14 +87,12 @@ export function ChatView({
       ),
     [rows, filter, term, expandedGroupId, collapsedGroupId],
   );
-  const openRosters = useMemo(
-    () =>
-      new Set([
-        expandedGroupId,
-        ...filtered.flatMap((row) => ('memberId' in row.target ? [row.target.groupId] : [])),
-      ]),
-    [expandedGroupId, filtered],
-  );
+  // Keep event handlers stable when unread counts or previews change, not expansion.
+  const rosterKey = JSON.stringify([
+    ...(expandedGroupId ? [expandedGroupId] : []),
+    ...new Set(filtered.flatMap((row) => ('memberId' in row.target ? [row.target.groupId] : []))),
+  ]);
+  const openRosters = useMemo(() => new Set<string>(JSON.parse(rosterKey)), [rosterKey]);
   const groupRoom = !!selected && 'groupId' in selected.target && !('memberId' in selected.target);
   const threadMotion = useConversationMotion(showingList ? undefined : selected?.key, 12);
   const listMotion = useConversationMotion(showingList ? 'list' : undefined, -8);
@@ -104,11 +102,14 @@ export function ChatView({
       Keyboard.dismiss();
       if (!openThread) animateLayout();
       const room = choice.groupId && choice.key === 'group:' + choice.groupId;
-      setCollapsedGroupId(room && openRosters.has(choice.groupId) ? choice.groupId : undefined);
+      setCollapsedGroupId(
+        room && choice.groupId && openRosters.has(choice.groupId) ? choice.groupId : undefined,
+      );
       onSelect(choice, openThread);
     },
     [onSelect, openRosters, animateLayout],
   );
+  const toggleMembers = useCallback((choice: ChatSelection) => select(choice, false), [select]);
   const conversationHeader = selected ? (
     <View style={[s.threadHeader, compact && s.phoneHeader]}>
       {groupRoom ? (
@@ -295,18 +296,7 @@ export function ChatView({
                   unread={unread}
                   timestamp={timestamp}
                   onSelect={select}
-                  onToggleMembers={
-                    room
-                      ? () =>
-                          select(
-                            {
-                              key: item.key,
-                              groupId: 'groupId' in item.target ? item.target.groupId : undefined,
-                            },
-                            false,
-                          )
-                      : undefined
-                  }
+                  onToggleMembers={room ? toggleMembers : undefined}
                 />
               </View>
             );

@@ -5,6 +5,7 @@ export interface AuthUser {
   readonly fullName?: string;
   readonly birthday?: string;
   readonly location?: string;
+  readonly phoneNumber?: string;
   readonly avatarUrl?: string | null;
   readonly profileStatus?: 'loading' | 'ready' | 'error';
   /** Give the initial profile watch priority over background social listeners. */
@@ -19,6 +20,8 @@ export interface UserProfile {
   readonly fullName: string;
   readonly birthday: string;
   readonly location: string;
+  /** Omit to leave the stored number unchanged; an empty string clears it. */
+  readonly phoneNumber?: string;
   readonly avatar: AvatarSelection | null;
 }
 export interface AvatarPicker {

@@ -75,6 +75,55 @@ beforeEach(async () => {
 after(async () => {
   await env?.cleanup();
 });
+test('optional phone is owner-only, including after contact acceptance, and validates stored format', async () => {
+  const alice = db('alice');
+  const phone = doc(alice, 'users', 'alice', 'private', 'phone');
+  await assertSucceeds(setDoc(phone, { phoneNumber: '+12025550123' }));
+  assert.equal((await assertSucceeds(getDoc(phone))).data().phoneNumber, '+12025550123');
+  await request();
+  await accept();
+  await assertSucceeds(getDoc(doc(db('bob'), 'users', 'alice')));
+  await assertFails(getDoc(doc(db('bob'), 'users', 'alice', 'private', 'phone')));
+  await assertFails(
+    setDoc(doc(db('bob'), 'users', 'alice', 'private', 'phone'), { phoneNumber: '' }),
+  );
+  await assertFails(
+    getDoc(doc(env.unauthenticatedContext().firestore(), 'users', 'alice', 'private', 'phone')),
+  );
+  for (const phoneNumber of ['123', '1'.repeat(16), 'invalid', 12025550123, null])
+    await assertFails(setDoc(phone, { phoneNumber }));
+  await assertFails(setDoc(phone, { phoneNumber: '+12025550123', verified: true }));
+  await assertFails(setDoc(phone, {}));
+  await assertFails(updateDoc(doc(alice, 'users', 'alice'), { phoneNumber: '+12025550123' }));
+  await assertSucceeds(setDoc(phone, { phoneNumber: '' }));
+  await assertSucceeds(deleteDoc(phone));
+});
+
+test('profile and optional phone save atomically; onboarding still requires name, birthday and location', async () => {
+  const database = db('new-user');
+  const profilePath = doc(database, 'users', 'new-user');
+  const phonePath = doc(database, 'users', 'new-user', 'private', 'phone');
+  const complete = {
+    fullName: 'New user',
+    birthday: '2000-01-01',
+    location: 'Orlando',
+    avatarUrl: null,
+    createdAt: serverTimestamp(),
+  };
+  for (const field of ['fullName', 'birthday', 'location']) {
+    const batch = writeBatch(database);
+    batch.set(profilePath, { ...complete, [field]: '' });
+    batch.set(phonePath, { phoneNumber: '+12025550123' });
+    await assertFails(batch.commit());
+    assert.equal((await getDoc(phonePath)).exists(), false);
+  }
+  await assertSucceeds(setDoc(profilePath, complete));
+  const batch = writeBatch(database);
+  batch.update(profilePath, { fullName: 'New name' });
+  batch.set(phonePath, { phoneNumber: '+12025550123' });
+  await assertSucceeds(batch.commit());
+  assert.equal((await getDoc(profilePath)).data().fullName, 'New name');
+});
 function pending() {
   return {
     fromId: 'alice',

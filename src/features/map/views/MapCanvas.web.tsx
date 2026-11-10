@@ -65,7 +65,7 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
     return () => clearTimeout(timer);
   }, [ready, error, attempt]);
   useEffect(() => {
-    if (initialized) {
+    if (initialized && props.active !== false) {
       frame.current?.contentWindow?.postMessage(
         JSON.stringify({
           id: ++sequence.current,
@@ -89,6 +89,7 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
       sentSharedTrail.current = props.sharedTrail;
     }
   }, [
+    props.active,
     initialized,
     positionLabel,
     props.state.language,

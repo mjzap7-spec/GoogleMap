@@ -2,9 +2,11 @@ import { NoticeViewModel } from '../../../shared/feedback/NoticeViewModel';
 import type { AuthRepository, AuthUser, AvatarPicker, UserProfile } from '../models/auth';
 import type { City, CityRepository } from '../models/city';
 import { validateProfile } from '../models/validation';
+import { normalizePhoneNumber } from '../models/phoneNumber';
 import { authErrorMessage } from '../models/AuthFailure';
 
 export interface ProfileState extends UserProfile {
+  phoneNumber: string;
   avatarUrl: string | null;
   cityQuery: string;
   selectedCity: City | null;
@@ -23,6 +25,7 @@ export interface ProfileState extends UserProfile {
 export class ProfileViewModel extends NoticeViewModel<ProfileState> {
   private generation = 0;
   private searchVersion = 0;
+  private phoneEdited = false;
   private timer?: ReturnType<typeof setTimeout>;
   private controller?: AbortController;
   constructor(
@@ -36,6 +39,7 @@ export class ProfileViewModel extends NoticeViewModel<ProfileState> {
       fullName: user.fullName ?? '',
       birthday: user.birthday ?? '',
       location: user.location ?? '',
+      phoneNumber: user.phoneNumber ?? '',
       avatarUrl: user.avatarUrl ?? null,
       avatar: null,
       cityQuery: user.location ?? '',
@@ -53,6 +57,10 @@ export class ProfileViewModel extends NoticeViewModel<ProfileState> {
     });
   }
   hydrate = (user: AuthUser) => {
+    // The owner-only phone listener may resolve after the rest of the profile.
+    // Never replace a typed number, or erase an unread number when saving other fields.
+    if (!this.phoneEdited && !this.state.busy && user.phoneNumber !== undefined)
+      this.update({ phoneNumber: user.phoneNumber });
     if (this.state.dirty || this.state.busy || this.state.pickingAvatar) return;
     this.update({
       fullName: user.fullName ?? '',
@@ -69,6 +77,11 @@ export class ProfileViewModel extends NoticeViewModel<ProfileState> {
   setBirthday = (birthday: string) => {
     if (birthday === this.state.birthday) return;
     if (!this.state.busy) this.update({ birthday, dirty: true, error: '', notice: '' });
+  };
+  setPhoneNumber = (phoneNumber: string) => {
+    if (this.state.busy || phoneNumber === this.state.phoneNumber) return;
+    this.phoneEdited = true;
+    this.update({ phoneNumber, dirty: true, error: '', notice: '' });
   };
   setCityQuery = (cityQuery: string) => {
     if (this.state.busy || cityQuery === this.state.cityQuery) return;
@@ -160,6 +173,7 @@ export class ProfileViewModel extends NoticeViewModel<ProfileState> {
       fullName: this.state.fullName.trim(),
       birthday: this.state.birthday,
       location: this.state.location,
+      ...(this.phoneEdited ? { phoneNumber: normalizePhoneNumber(this.state.phoneNumber) } : {}),
       avatar: this.state.avatar,
     };
     this.update({ busy: true, error: '', notice: '' });
@@ -167,9 +181,11 @@ export class ProfileViewModel extends NoticeViewModel<ProfileState> {
       const avatarUrl = await this.repository.saveProfile(profile, this.state.avatarUrl);
       if (generation === this.generation) {
         this.onSaved?.(profile, avatarUrl);
+        this.phoneEdited = false;
         this.update({
           notice: 'Profile saved.',
           fullName: profile.fullName,
+          phoneNumber: profile.phoneNumber ?? this.state.phoneNumber,
           avatar: null,
           avatarUrl,
           dirty: false,

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { Animated, Easing, Platform } from 'react-native';
 import { useReducedMotion } from '../../../shared/motion/useReducedMotion';
+import { motion } from '../../../shared/motion/tokens';
 
 const driver = { useNativeDriver: Platform.OS !== 'web', isInteraction: false };
 
@@ -39,7 +40,7 @@ export function useConversationMotion(identity?: string, offset = 8) {
     progress.setValue(0);
     const animation = Animated.timing(progress, {
       toValue: 1,
-      duration: 200,
+      duration: motion.chatEnterDuration,
       easing: Easing.out(Easing.cubic),
       ...driver,
     });
@@ -91,7 +92,7 @@ export function useMessageArrival(newest: boolean) {
     progress.setValue(0);
     const animation = Animated.timing(progress, {
       toValue: 1,
-      duration: 170,
+      duration: motion.messageEnterDuration,
       easing: Easing.out(Easing.cubic),
       ...driver,
     });

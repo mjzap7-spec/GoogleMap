@@ -25,7 +25,7 @@ export const ConversationRow = memo(function ConversationRow({
   unread: number;
   timestamp?: string;
   onSelect: (choice: ChatSelection) => void;
-  onToggleMembers?: () => void;
+  onToggleMembers?: (choice: ChatSelection) => void;
 }) {
   const { t } = useTranslation();
   const member = 'memberId' in item.target;
@@ -112,7 +112,10 @@ export const ConversationRow = memo(function ConversationRow({
           accessibilityState={{ expanded }}
           onPress={(event) => {
             event.stopPropagation();
-            onToggleMembers();
+            onToggleMembers({
+              key: item.key,
+              groupId: 'groupId' in item.target ? item.target.groupId : undefined,
+            });
           }}
           style={s.toggle}
         >

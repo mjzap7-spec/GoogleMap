@@ -1,13 +1,12 @@
 import { useMemo } from 'react';
-import { useContactsContext } from '../../contacts/bindings/ContactsProvider';
+import { useContactsSelection } from '../../contacts/bindings/ContactsProvider';
+import { selectContacts } from '../../contacts/viewmodels/contactSelectors';
 import { useSharingGroups } from '../../contacts/bindings/SharingProvider';
 import { personChats } from '../models/personChats';
 import { useUnreadChats } from './UnreadChatsProvider';
 
 export function usePersonChats() {
-  const {
-    state: { contacts },
-  } = useContactsContext();
+  const { state: contacts } = useContactsSelection(selectContacts);
   const {
     state: { groups },
     model,

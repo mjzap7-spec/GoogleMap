@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import type { ContactsPanelProps } from './ContactsPanel';
+import type { ContactOverlayState } from '../viewmodels/contactSelectors';
 import { colors } from '../../../shared/theme/colors';
 import { FormField } from '../../../shared/ui/FormField';
 import { useReducedMotion } from '../../../shared/motion/useReducedMotion';
@@ -20,7 +21,7 @@ import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 export function ContactDialogs({
   state,
   commands,
-}: Pick<ContactsPanelProps, 'state' | 'commands'>) {
+}: Pick<ContactsPanelProps, 'commands'> & { state: Readonly<ContactOverlayState> }) {
   const { t } = useTranslation();
 
   const { height } = useWindowDimensions();

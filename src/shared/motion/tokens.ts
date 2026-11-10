@@ -3,6 +3,8 @@ export const motion = {
   pageEnterDuration: 120,
   pageExitDuration: 0,
   nativePageDuration: 120,
+  chatEnterDuration: 160,
+  messageEnterDuration: 150,
   buttonDuration: 70,
   buttonPressedScale: 0.985,
   feedbackEnterDuration: 100,

@@ -4,6 +4,7 @@ import { getFirebaseApp } from '../../../../config/firebase/client';
 import type { UserProfile } from '../../models/auth';
 import type { AvatarStorage, UploadedAvatar } from '../../models/avatarStorage';
 import { AuthFailure } from '../../models/AuthFailure';
+import { normalizePhoneNumber } from '../../models/phoneNumber';
 
 export async function saveFirebaseProfile(
   auth: Auth,
@@ -32,6 +33,11 @@ export async function saveFirebaseProfile(
         avatarUrl,
         createdAt: existing.exists() ? existing.data().createdAt : serverTimestamp(),
       });
+      // Contacts can read the profile document; the phone number is owner-only.
+      if (profile.phoneNumber !== undefined)
+        transaction.set(doc(db, 'users', user.uid, 'private', 'phone'), {
+          phoneNumber: normalizePhoneNumber(profile.phoneNumber),
+        });
     });
     return avatarUrl;
   } catch (error) {

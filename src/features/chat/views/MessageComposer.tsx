@@ -102,9 +102,9 @@ export function MessageComposer({
   const appearance = useMessageArrival(true);
   useEffect(() => {
     if (!actionKey) return;
-    // Let the message sheet finish dismissing before moving focus to the composer.
-    const timer = setTimeout(() => input.current?.focus(), 180);
-    return () => clearTimeout(timer);
+    // Reply/edit now use the inline action bar. Focus as soon as the composer mounts.
+    const frame = requestAnimationFrame(() => input.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [actionKey]);
   useEffect(() => {
     if (!emojiOpen) return;

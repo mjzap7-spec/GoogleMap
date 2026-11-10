@@ -43,6 +43,8 @@ export interface MapUserMarker {
   readonly updatedAt?: number;
 }
 export interface MapCanvasProps {
+  /** Keep the renderer mounted, but send only the latest state when this screen is visible. */
+  active?: boolean;
   sharedTrail?: readonly (readonly TravelPoint[])[];
   onSelectUser?: (id: string) => void;
   users?: readonly MapUserMarker[];

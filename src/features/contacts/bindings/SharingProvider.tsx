@@ -9,22 +9,27 @@ import React, {
 } from 'react';
 import type { AuthUser } from '../../auth/models/auth';
 import { useAuthDependencies } from '../../auth/bindings/AuthProvider';
-import { useContactsContext } from './ContactsProvider';
+import { useContactsSelection } from './ContactsProvider';
+import { selectNearbyEnabled } from '../viewmodels/contactSelectors';
 import { useMapViewModel } from '../../map/bindings/MapProvider';
 import type { SharingState, SharingViewModel } from '../viewmodels/SharingViewModel';
 import { useViewModelSelection } from '../../../shared/mvvm/useViewModelSelection';
+import { shallowEqual } from '../../../shared/mvvm/shallowEqual';
+import type { MapState } from '../../map/models/map';
+const selectPosition = (state: Readonly<MapState>) => ({
+  live: state.live,
+  trail: state.trail,
+  tracking: state.tracking,
+});
 const Context = createContext<SharingViewModel | null>(null);
 export function SharingProvider({ user, children }: PropsWithChildren<{ user: AuthUser }>) {
   const { createSharing } = useAuthDependencies();
   const [model] = useState(() => createSharing(user));
   useActionNotices(model);
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
-  const {
-    model: contacts,
-    state: { showNearby },
-  } = useContactsContext();
+  const { model: contacts, state: showNearby } = useContactsSelection(selectNearbyEnabled);
   const map = useMapViewModel();
-  const mapState = useSyncExternalStore(map.subscribe, map.getSnapshot, map.getSnapshot);
+  const mapState = useViewModelSelection(map, selectPosition, shallowEqual);
   const profileSyncPending = user.profileSyncPending === true;
   useEffect(() => {
     if (!showNearby) model.clearFocus();

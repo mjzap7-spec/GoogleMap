@@ -4,19 +4,20 @@ import { memberConversations } from '../../chat/models/conversations';
 import { router } from 'expo-router';
 import { PrivateGroupsView } from '../views/PrivateGroupsView';
 import { useSharing } from '../bindings/SharingProvider';
-import { useContactsContext } from '../bindings/ContactsProvider';
+import { useContactsSelection } from '../bindings/ContactsProvider';
+import { selectContacts } from '../viewmodels/contactSelectors';
 import { useMapViewModel } from '../../map/bindings/MapProvider';
 export function PrivateGroups({ unreadChats }: { unreadChats: ReadonlyMap<string, number> }) {
   const { state, model } = useSharing();
-  const { state: contacts, commands: contactCommands } = useContactsContext();
+  const { state: contacts, commands: contactCommands } = useContactsSelection(selectContacts);
   const map = useMapViewModel();
   const group = state.groups.find(
     (g) => g.id === state.selectedId && g.joinedIds.includes(model.user.id),
   );
   const roster = useGroupRoster(model.user.id, group?.id ?? '');
   const members = useMemo(
-    () => memberConversations(group, roster.members, contacts.contacts, model.user),
-    [group, roster.members, contacts.contacts, model.user],
+    () => memberConversations(group, roster.members, contacts, model.user),
+    [group, roster.members, contacts, model.user],
   );
   return (
     <PrivateGroupsView
@@ -43,7 +44,7 @@ export function PrivateGroups({ unreadChats }: { unreadChats: ReadonlyMap<string
         stopTrip: model.stopTrip,
         start: model.start,
       }}
-      contacts={contacts.contacts}
+      contacts={contacts}
       userId={model.user.id}
       onLocate={(location) => {
         if (!contactCommands.canLocateOnMap()) return;

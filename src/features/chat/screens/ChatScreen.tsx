@@ -1,36 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { AppState, BackHandler, Keyboard, Platform, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { BackHandler, Keyboard, useWindowDimensions } from 'react-native';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useSession } from '../../auth/bindings/useSession';
-import { useContactsContext } from '../../contacts/bindings/ContactsProvider';
+import { useContactsSelection } from '../../contacts/bindings/ContactsProvider';
+import { selectContactDirectory } from '../../contacts/viewmodels/contactSelectors';
+import { shallowEqual } from '../../../shared/mvvm/shallowEqual';
 import { useSharingGroups } from '../../contacts/bindings/SharingProvider';
-import {
-  conversationList,
-  resolveConversation,
-  memberKey,
-  type ChatSelection,
-} from '../models/conversations';
+import { resolveConversation, memberKey, type ChatSelection } from '../models/conversations';
+import { createConversationProjection } from '../models/conversationProjection';
 import { useGroupChatActivity } from '../bindings/useGroupChatActivity';
 import { useConversation } from '../bindings/useConversation';
+import { useConversationRead } from '../bindings/useConversationRead';
 import { useUnreadChats } from '../bindings/UnreadChatsProvider';
 import { ChatView } from '../views/ChatView';
 import { MessagePane } from '../views/MessagePane';
-import type { ChatPeer, ReadTime } from '../models/chat';
+import type { ChatPeer } from '../models/chat';
 import { personConversation } from '../models/personConversation';
 
-function foreground() {
-  if (Platform.OS === 'web')
-    return typeof document !== 'undefined' && document.visibilityState === 'visible';
-  return AppState.currentState === 'active';
-}
-function observeForeground(notify: () => void) {
-  if (Platform.OS === 'web' && typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', notify);
-    return () => document.removeEventListener('visibilitychange', notify);
-  }
-  const sub = AppState.addEventListener('change', notify);
-  return () => sub.remove();
-}
 function Thread({
   uid,
   peer,
@@ -46,16 +32,7 @@ function Thread({
 }) {
   const { state, commands } = useConversation(uid, peer, focused);
   const { model } = useUnreadChats();
-  const active = useSyncExternalStore(observeForeground, foreground, () => false);
-  const onRead = useCallback(
-    (through: ReadTime) => {
-      if (focused && foreground()) {
-        model.markRead(peer, through);
-        commands.markVisibleRead(through);
-      }
-    },
-    [focused, model, peer, commands],
-  );
+  const onRead = useConversationRead(peer, focused, model, commands.markVisibleRead);
   return (
     <MessagePane
       uid={uid}
@@ -64,7 +41,7 @@ function Thread({
       state={state}
       commands={commands}
       groupRoom={'senderName' in peer}
-      onRead={focused && active ? onRead : undefined}
+      onRead={onRead}
     />
   );
 }
@@ -105,7 +82,7 @@ function ChatWorkspace({
   const {
     state: { user },
   } = useSession();
-  const { state: contacts, commands } = useContactsContext();
+  const { state: contacts, commands } = useContactsSelection(selectContactDirectory, shallowEqual);
   const { state: sharing, model: groups } = useSharingGroups();
   const uid = user?.id ?? '';
   const focused = useIsFocused();
@@ -116,9 +93,10 @@ function ChatWorkspace({
   const inbox = useConversation(uid, undefined, focused);
   const activity = useGroupChatActivity(uid, sharing.groups, focused);
   const { state: unread, model: unreadModel } = useUnreadChats();
+  const projectConversations = useMemo(() => createConversationProjection(), []);
   const rows = useMemo(
     () =>
-      conversationList(
+      projectConversations(
         uid,
         contacts.contacts,
         sharing.groups,
@@ -126,7 +104,15 @@ function ChatWorkspace({
         activity.entries,
         unread.counts,
       ),
-    [uid, contacts.contacts, sharing.groups, inbox.state.previews, activity.entries, unread.counts],
+    [
+      projectConversations,
+      uid,
+      contacts.contacts,
+      sharing.groups,
+      inbox.state.previews,
+      activity.entries,
+      unread.counts,
+    ],
   );
   const [choice, setChoice] = useState<ChatSelection | undefined>(
     initialKey ? { key: initialKey, groupId: initialGroup } : undefined,
@@ -175,6 +161,12 @@ function ChatWorkspace({
     setPendingPerson(undefined);
     setListOpen(true);
   }, []);
+  const select = useCallback((next: ChatSelection, openThread = true) => {
+    setPendingPerson(undefined);
+    setOptionsRequest(0);
+    setChoice(next);
+    setListOpen(!openThread);
+  }, []);
   useEffect(() => {
     if (!focused || !compact || showingList) return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -215,12 +207,7 @@ function ChatWorkspace({
         setOptionsRequest((value) => value + 1);
       }}
       selected={selected?.row}
-      onSelect={(next, openThread = true) => {
-        setPendingPerson(undefined);
-        setOptionsRequest(0);
-        setChoice(next);
-        setListOpen(!openThread);
-      }}
+      onSelect={select}
       expandedGroup={sharing.groups.find((g) => g.id === selected?.groupId)}
       transcript={
         peer &&

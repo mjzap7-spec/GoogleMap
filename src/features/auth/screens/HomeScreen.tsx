@@ -2,7 +2,7 @@ import { TestUserCard } from '../../map/views/TestUserCard';
 import { useSharing } from '../../contacts/bindings/SharingProvider';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Redirect, router } from 'expo-router';
+import { Redirect, router, useIsFocused } from 'expo-router';
 import { PageSurface } from '../../../shared/motion/PageSurface';
 import { usePageTransition } from '../../../shared/motion/usePageTransition';
 import { HomeView } from '../views/HomeView';
@@ -40,6 +40,7 @@ export function HomeScreen() {
 }
 
 function HomeContent({ error }: { error: string }) {
+  const mapActive = useIsFocused();
   const map = useMap();
   const contacts = useContacts();
   const sharing = useSharing();
@@ -124,6 +125,7 @@ function HomeContent({ error }: { error: string }) {
         }}
         map={{
           ...map,
+          active: mapActive,
           sharedTrail: testCount ? undefined : sharedTrail,
           onSelectUser: selectUser,
           users: map.state.testUserCount ? map.state.testUsers : users,

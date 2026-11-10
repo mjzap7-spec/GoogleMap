@@ -21,6 +21,7 @@ export function useProfile(user: AuthUser) {
     () => ({
       setFullName: viewModel.setFullName,
       setBirthday: viewModel.setBirthday,
+      setPhoneNumber: viewModel.setPhoneNumber,
       setCityQuery: viewModel.setCityQuery,
       selectCity: viewModel.selectCity,
       removeAvatar: viewModel.removeAvatar,

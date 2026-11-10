@@ -76,6 +76,7 @@ export class SessionViewModel extends ObservableViewModel<SessionState> {
         fullName: profile.fullName,
         birthday: profile.birthday,
         location: profile.location,
+        ...(profile.phoneNumber !== undefined ? { phoneNumber: profile.phoneNumber } : {}),
         avatarUrl,
         profileStatus: 'ready',
       },

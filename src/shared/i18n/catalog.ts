@@ -3,6 +3,34 @@ import { chatActionsCatalog } from './chatActionsCatalog';
 export const catalog: Record<string, readonly string[]> = {
   ...socialExperienceCatalog,
   ...chatActionsCatalog,
+  'Phone number (optional)': [
+    'Número de teléfono (opcional)',
+    'Numéro de téléphone (facultatif)',
+    'Telefonnummer (optional)',
+    '电话号码（选填）',
+    '電話番号（任意）',
+  ],
+  'Add a phone number': [
+    'Añadir un número de teléfono',
+    'Ajouter un numéro de téléphone',
+    'Telefonnummer hinzufügen',
+    '添加电话号码',
+    '電話番号を追加',
+  ],
+  'You can leave this blank and add it later.': [
+    'Puedes dejarlo en blanco y añadirlo más tarde.',
+    'Vous pouvez laisser ce champ vide et le remplir plus tard.',
+    'Du kannst dieses Feld leer lassen und später ausfüllen.',
+    '可以留空，稍后再添加。',
+    '空欄のままにして、後から追加できます。',
+  ],
+  'Enter a phone number with 7–15 digits, or leave it blank.': [
+    'Introduce un número de teléfono de 7 a 15 dígitos o déjalo en blanco.',
+    'Saisissez un numéro de téléphone de 7 à 15 chiffres ou laissez ce champ vide.',
+    'Gib eine Telefonnummer mit 7–15 Ziffern ein oder lasse das Feld leer.',
+    '请输入7至15位数字的电话号码，或留空。',
+    '7～15桁の電話番号を入力するか、空欄にしてください。',
+  ],
   'Your contacts': ['Tus contactos', 'Vos contacts', 'Deine Kontakte', '你的联系人', '連絡先'],
   'Create group': [
     'Crear grupo',

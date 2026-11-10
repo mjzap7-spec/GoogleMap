@@ -13,7 +13,7 @@ function createFirebaseFixture(overrides = {}) {
   };
   mainAuth.currentUser = user;
   const options = overrides.options ?? { storageBucket: 'test-bucket' };
-  let authChanged, profileChanged, profileError;
+  let authChanged, profileChanged, profileError, phoneChanged, phoneError;
   const mocks = {
     'firebase/app': {
       initializeApp: () => {
@@ -86,7 +86,11 @@ function createFirebaseFixture(overrides = {}) {
           set: (path, data) => calls.push(['save-profile', path, data]),
         }),
       getFirestore: () => ({}),
-      doc: (db, collection, id) => ({ collection, id }),
+      doc: (db, collection, id, ...children) => ({
+        collection,
+        id,
+        ...(children.length ? { children } : {}),
+      }),
       serverTimestamp: () => 'server-time',
       setDoc: async (path, data) => {
         calls.push(['save-profile', path, data]);
@@ -95,6 +99,12 @@ function createFirebaseFixture(overrides = {}) {
         calls.push(['delete-profile']);
       },
       onSnapshot: (path, options, success, error) => {
+        if (path.children?.join('/') === 'private/phone') {
+          calls.push(['watch-phone', path.id]);
+          phoneChanged = success;
+          phoneError = error;
+          return () => calls.push(['stop-phone']);
+        }
         calls.push(['watch-profile', path.id]);
         profileChanged = success;
         profileError = error;
@@ -156,6 +166,8 @@ function createFirebaseFixture(overrides = {}) {
     authChanged: (value) => authChanged(value),
     profileChanged: (value, metadata) => profileChanged({ data: () => value, metadata }),
     profileError: () => profileError(new Error('offline')),
+    phoneChanged: (value, metadata) => phoneChanged({ data: () => value, metadata }),
+    phoneError: () => phoneError(new Error('offline')),
   };
 }
 

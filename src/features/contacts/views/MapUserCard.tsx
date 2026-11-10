@@ -7,6 +7,7 @@ import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { colors } from '../../../shared/theme/colors';
 import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 import type { ContactsPanelProps } from './ContactsPanel';
+import type { ContactOverlayState } from '../viewmodels/contactSelectors';
 import { ChatIcon } from '../../../shared/ui/ChatIcon';
 import { UnreadBadge, chatButtonLabel } from '../../../shared/ui/UnreadBadge';
 import { LocationUpdate } from './LocationUpdate';
@@ -15,7 +16,8 @@ export function MapUserCard({
   commands,
   unread,
   onChat,
-}: Pick<ContactsPanelProps, 'state' | 'commands'> & {
+}: Pick<ContactsPanelProps, 'commands'> & {
+  state: Readonly<ContactOverlayState>;
   unread: number;
   onChat?: () => void;
 }) {
