@@ -50,7 +50,7 @@ export function ManageContactsView({
   );
 }
 const styles = StyleSheet.create({
-  tabs: { marginBottom: 18 },
+  tabs: { marginBottom: 14 },
   screen: { flex: 1, backgroundColor: colors.background },
   body: {
     flex: 1,

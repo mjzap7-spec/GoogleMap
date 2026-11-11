@@ -29,6 +29,7 @@ import { InlineRetry } from '../../../shared/ui/InlineRetry';
 import type { PrivateGroup } from '../../contacts/models/sharing';
 import { ConversationRow } from './ConversationRow';
 import { useConversationMotion } from './chatMotion';
+import { CallIcon } from '../../interviews/views/CallIcon';
 interface Props {
   rows: Conversation[];
   compact: boolean;
@@ -45,6 +46,7 @@ interface Props {
   loading: boolean;
   error: string;
   onThreadOptions: () => void;
+  onInterview?: (mode: 'voice' | 'video') => void;
 }
 export function ChatView({
   rows,
@@ -62,6 +64,7 @@ export function ChatView({
   loading,
   error,
   onThreadOptions,
+  onInterview,
 }: Props) {
   const { t, language } = useTranslation();
   const formats = useMemo(
@@ -140,7 +143,21 @@ export function ChatView({
           )
         )}
       </View>
-      {(compact || groupRoom) && (
+      {onInterview &&
+        (['voice', 'video'] as const).map((mode) => (
+          <Pressable
+            key={mode}
+            accessibilityRole="button"
+            accessibilityLabel={t(
+              mode === 'voice' ? 'Start voice interview' : 'Start video interview',
+            )}
+            onPress={() => onInterview(mode)}
+            style={({ pressed }) => [s.peopleButton, pressed && { opacity: 0.65 }]}
+          >
+            <CallIcon kind={mode} />
+          </Pressable>
+        ))}
+      {groupRoom && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t(groupRoom ? 'Show group members' : 'All chats')}
@@ -432,7 +449,7 @@ const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  headerIdentity: { flex: 1, gap: 2 },
+  headerIdentity: { flex: 1, minWidth: 0, gap: 2 },
   headerGroup: {
     width: 34,
     height: 34,

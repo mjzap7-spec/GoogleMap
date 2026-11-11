@@ -112,3 +112,44 @@ test('activity distinguishes the first empty snapshot from a pending history wit
   assert.equal(model.getSnapshot(), snapshot);
   model.stop();
 });
+
+test('background activity releases listeners, retains previews, and refreshes membership on resume', () => {
+  const watches = [];
+  const subscribe = (next) => {
+    const watch = { next, stopped: false };
+    watches.push(watch);
+    return () => {
+      watch.stopped = true;
+    };
+  };
+  const model = new GroupChatActivityViewModel(
+    {
+      members: (_uid, _groupId, next) => subscribe(next),
+      messages: (_uid, _peer, _limit, next) => subscribe(next),
+    },
+    'me',
+  );
+  model.sync([family]);
+  assert.equal(watches.length, 3);
+  watches[2].next([{ id: 'old', text: 'Hello', time: 10 }]);
+  const cached = model.getSnapshot();
+  model.pause();
+  assert.ok(watches.every((watch) => watch.stopped));
+  assert.equal(model.getSnapshot(), cached, 'backgrounding does not blank the chat list');
+  watches[2].next([{ id: 'late', text: 'Ignore callback', time: 20 }]);
+  assert.equal(model.getSnapshot(), cached);
+  model.sync([family]);
+  assert.equal(watches.length, 6);
+  model.sync([family]);
+  assert.equal(watches.length, 6, 'unchanged group snapshots do not duplicate listeners');
+  watches[5].next([{ id: 'new', text: 'Fresh', time: 30 }]);
+  assert.equal(model.getSnapshot().entries.get(memberKey('family', 'bob')).latest.id, 'new');
+  model.pause();
+  model.sync([]);
+  assert.equal(
+    model.getSnapshot().entries.size,
+    0,
+    'removed memberships cannot retain cached entries after pause',
+  );
+  model.stop();
+});

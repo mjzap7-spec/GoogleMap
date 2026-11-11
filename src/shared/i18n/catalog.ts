@@ -1,8 +1,50 @@
 import { socialExperienceCatalog } from './socialExperienceCatalog';
 import { chatActionsCatalog } from './chatActionsCatalog';
+import { interviewCatalog } from './interviewCatalog';
 export const catalog: Record<string, readonly string[]> = {
   ...socialExperienceCatalog,
   ...chatActionsCatalog,
+  ...interviewCatalog,
+  Animated: ['Animados', 'Animés', 'Animiert', '动态', 'アニメーション'],
+  Flags: ['Banderas', 'Drapeaux', 'Flaggen', '旗帜', '旗'],
+  Smileys: ['Caritas', 'Émoticônes', 'Smileys', '表情', '顔'],
+  'People & gestures': [
+    'Personas y gestos',
+    'Personnes et gestes',
+    'Menschen & Gesten',
+    '人物与手势',
+    '人物とジェスチャー',
+  ],
+  'Hearts & symbols': [
+    'Corazones y símbolos',
+    'Cœurs et symboles',
+    'Herzen & Symbole',
+    '爱心与符号',
+    'ハートと記号',
+  ],
+  'Animals & nature': [
+    'Animales y naturaleza',
+    'Animaux et nature',
+    'Tiere & Natur',
+    '动物与自然',
+    '動物と自然',
+  ],
+  'Food & drink': [
+    'Comida y bebida',
+    'Nourriture et boissons',
+    'Essen & Trinken',
+    '食物与饮品',
+    '食べ物と飲み物',
+  ],
+  'Travel & places': [
+    'Viajes y lugares',
+    'Voyages et lieux',
+    'Reisen & Orte',
+    '旅行与地点',
+    '旅行と場所',
+  ],
+  Activities: ['Actividades', 'Activités', 'Aktivitäten', '活动', 'アクティビティ'],
+  Objects: ['Objetos', 'Objets', 'Objekte', '物品', '物'],
   'Phone number (optional)': [
     'Número de teléfono (opcional)',
     'Numéro de téléphone (facultatif)',

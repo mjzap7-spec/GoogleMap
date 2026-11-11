@@ -16,6 +16,8 @@ import { ChatView } from '../views/ChatView';
 import { MessagePane } from '../views/MessagePane';
 import type { ChatPeer } from '../models/chat';
 import { personConversation } from '../models/personConversation';
+import { useInterviewModel } from '../../interviews/bindings/InterviewsProvider';
+import { interviewTarget } from '../../interviews/models/interview';
 
 function Thread({
   uid,
@@ -85,6 +87,7 @@ function ChatWorkspace({
   const { state: contacts, commands } = useContactsSelection(selectContactDirectory, shallowEqual);
   const { state: sharing, model: groups } = useSharingGroups();
   const uid = user?.id ?? '';
+  const interviews = useInterviewModel();
   const focused = useIsFocused();
   const compact = useWindowDimensions().width < 640;
   const [listOpen, setListOpen] = useState(!initialKey && !initialPerson);
@@ -197,6 +200,19 @@ function ChatWorkspace({
   );
   return (
     <ChatView
+      onInterview={
+        peer && !('senderName' in peer)
+          ? (mode) => {
+              Keyboard.dismiss();
+              const target = interviewTarget(
+                peer,
+                selected?.row.name ?? '',
+                selected?.row.avatarUrl,
+              );
+              if (target) interviews.startInterview(target, mode);
+            }
+          : undefined
+      }
       rows={rows}
       compact={compact}
       showingList={showingList}

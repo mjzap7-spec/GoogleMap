@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   empty: { paddingVertical: 20, textAlign: 'center' },
-  groupCard: { paddingHorizontal: 14, paddingVertical: 16, marginBottom: 12, borderRadius: 22 },
+  groupCard: { paddingHorizontal: 14, paddingVertical: 14, marginBottom: 10, borderRadius: 18 },
   content: { gap: 16, paddingBottom: 20 },
   card: {
     padding: 18,

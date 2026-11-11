@@ -36,6 +36,25 @@ test('reply sends a reference and keeps the draft when cancelled', async () => {
   assert.equal(vm.getSnapshot().draft, '');
   assert.equal(vm.getSnapshot().replying, undefined);
 });
+test('sending clears the composer immediately and restores the draft and reply on failure', async () => {
+  const { vm, repo } = fixture();
+  let reject;
+  repo.send = () =>
+    new Promise((_, fail) => {
+      reject = fail;
+    });
+  vm.setDraft('Keep this reply');
+  vm.reply('other');
+  const sending = vm.send();
+  assert.equal(vm.getSnapshot().draft, '');
+  assert.equal(vm.getSnapshot().sending, true);
+  reject(Error('offline'));
+  await sending;
+  assert.equal(vm.getSnapshot().draft, 'Keep this reply');
+  assert.equal(vm.getSnapshot().replying.id, 'other');
+  assert.equal(vm.getSnapshot().sending, false);
+});
+
 test('editing preserves an unsent draft and restores it on cancel or save', async () => {
   const { vm, calls } = fixture();
   vm.setDraft('Unsent draft');

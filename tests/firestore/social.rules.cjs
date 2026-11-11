@@ -38,6 +38,229 @@ function db(uid) {
     .firestore();
 }
 const names = { alice: 'Alice', bob: 'Bob', eve: 'Eve' };
+function interviewData(patch = {}) {
+  return {
+    fromId: 'alice',
+    toId: 'bob',
+    fromName: 'Alice',
+    fromAvatar: null,
+    kind: 'contact',
+    contextId: 'alice_bob',
+    mode: 'video',
+    status: 'ringing',
+    offer: { type: 'offer', sdp: 'test-offer' },
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(Date.now() + 60000),
+    validUntil: Timestamp.fromMillis(Date.now() + 7200000),
+    ...patch,
+  };
+}
+async function interviewFixture() {
+  await request();
+  await accept();
+  await setDoc(doc(db('alice'), 'interviewCalls', 'call'), interviewData());
+}
+test('interview calls: only participants can read signaling or query incoming invitations', async () => {
+  await interviewFixture();
+  await assertSucceeds(getDoc(doc(db('bob'), 'interviewCalls', 'call')));
+  await assertFails(getDoc(doc(db('eve'), 'interviewCalls', 'call')));
+  await assertFails(
+    getDoc(doc(env.unauthenticatedContext().firestore(), 'interviewCalls', 'call')),
+  );
+  await assertSucceeds(
+    getDocs(
+      query(
+        collection(db('bob'), 'interviewCalls'),
+        where('toId', '==', 'bob'),
+        where('status', '==', 'ringing'),
+        orderBy('createdAt', 'desc'),
+        limit(10),
+      ),
+    ),
+  );
+  await assertFails(
+    getDocs(
+      query(
+        collection(db('eve'), 'interviewCalls'),
+        where('toId', '==', 'bob'),
+        where('status', '==', 'ringing'),
+        limit(10),
+      ),
+    ),
+  );
+  await assertFails(getDocs(query(collection(db('bob'), 'interviewCalls'), limit(10))));
+});
+test('interview calls: strangers, forged profiles, invalid deadlines and oversized offers are rejected', async () => {
+  const ref = doc(db('alice'), 'interviewCalls', 'new');
+  await assertFails(setDoc(ref, interviewData()));
+  await request();
+  await accept();
+  for (const patch of [
+    { toId: 'eve' },
+    { fromId: 'eve' },
+    { fromName: 'Eve' },
+    { fromAvatar: 'https://example.com/fake.png' },
+    { toId: 'alice' },
+    { contextId: 'wrong' },
+    { mode: 'conference' },
+    { extra: true },
+    { status: 'accepted' },
+    { expiresAt: Timestamp.fromMillis(Date.now() + 120000) },
+    { validUntil: Timestamp.fromMillis(Date.now() + 9000000) },
+    { offer: { type: 'answer', sdp: 'answer' } },
+    { offer: { type: 'offer', sdp: 'x'.repeat(100001) } },
+  ]) {
+    await assertFails(setDoc(ref, interviewData(patch)));
+  }
+});
+test('interview calls: only callee can accept once; identities and offers cannot be changed', async () => {
+  await interviewFixture();
+  const caller = doc(db('alice'), 'interviewCalls', 'call'),
+    callee = doc(db('bob'), 'interviewCalls', 'call');
+  const answer = { status: 'accepted', answer: { type: 'answer', sdp: 'test-answer' } };
+  await assertFails(updateDoc(caller, answer));
+  await assertFails(updateDoc(callee, { ...answer, fromId: 'eve' }));
+  await assertFails(updateDoc(callee, { ...answer, offer: { type: 'offer', sdp: 'changed' } }));
+  await assertSucceeds(updateDoc(callee, answer));
+  await assertFails(
+    updateDoc(callee, { ...answer, answer: { type: 'answer', sdp: 'replacement' } }),
+  );
+  await assertSucceeds(updateDoc(caller, { status: 'ended', endedAt: serverTimestamp() }));
+  await assertFails(updateDoc(callee, answer));
+});
+test('interview calls: only callee may decline or mark busy; terminal calls cannot be revived', async () => {
+  await interviewFixture();
+  await assertFails(
+    updateDoc(doc(db('alice'), 'interviewCalls', 'call'), {
+      status: 'busy',
+      endedAt: serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(db('bob'), 'interviewCalls', 'call'), {
+      status: 'declined',
+      endedAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(updateDoc(doc(db('alice'), 'interviewCalls', 'call'), { status: 'ringing' }));
+});
+test('interview calls: expired invitations cannot be answered and removed contacts cannot reconnect', async () => {
+  await interviewFixture();
+  await env.withSecurityRulesDisabled((c) =>
+    updateDoc(doc(c.firestore(), 'interviewCalls', 'call'), {
+      expiresAt: Timestamp.fromMillis(Date.now() - 1000),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(db('bob'), 'interviewCalls', 'call'), {
+      status: 'accepted',
+      answer: { type: 'answer', sdp: 'answer' },
+    }),
+  );
+  await setDoc(doc(db('alice'), 'interviewCalls', 'fresh'), interviewData());
+  await env.withSecurityRulesDisabled((c) =>
+    deleteDoc(doc(c.firestore(), 'users', 'alice', 'contacts', 'bob')),
+  );
+  await assertFails(
+    updateDoc(doc(db('bob'), 'interviewCalls', 'fresh'), {
+      status: 'accepted',
+      answer: { type: 'answer', sdp: 'answer' },
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(db('alice'), 'interviewCalls', 'fresh'), {
+      status: 'ended',
+      endedAt: serverTimestamp(),
+    }),
+  );
+});
+test('interview calls: ICE is bounded, immutable, participant-scoped and stops after hangup', async () => {
+  await interviewFixture();
+  const data = {
+    fromId: 'alice',
+    index: 0,
+    candidate: 'candidate:1',
+    sdpMid: '0',
+    sdpMLineIndex: 0,
+  };
+  const ref = doc(db('alice'), 'interviewCalls', 'call', 'candidates', 'alice_0');
+  await assertSucceeds(setDoc(ref, data));
+  await assertFails(updateDoc(ref, { candidate: 'replaced' }));
+  await assertFails(
+    setDoc(doc(db('bob'), 'interviewCalls', 'call', 'candidates', 'alice_1'), {
+      ...data,
+      index: 1,
+    }),
+  );
+  await assertFails(
+    setDoc(doc(db('eve'), 'interviewCalls', 'call', 'candidates', 'eve_0'), {
+      ...data,
+      fromId: 'eve',
+    }),
+  );
+  await assertFails(
+    setDoc(doc(db('alice'), 'interviewCalls', 'call', 'candidates', 'alice_64'), {
+      ...data,
+      index: 64,
+    }),
+  );
+  await assertSucceeds(
+    getDocs(
+      query(
+        collection(db('bob'), 'interviewCalls', 'call', 'candidates'),
+        where('fromId', '==', 'alice'),
+        limit(64),
+      ),
+    ),
+  );
+  await assertFails(getDoc(doc(db('eve'), 'interviewCalls', 'call', 'candidates', 'alice_0')));
+  await updateDoc(doc(db('alice'), 'interviewCalls', 'call'), {
+    status: 'ended',
+    endedAt: serverTimestamp(),
+  });
+  await assertFails(
+    setDoc(doc(db('bob'), 'interviewCalls', 'call', 'candidates', 'bob_0'), {
+      ...data,
+      fromId: 'bob',
+    }),
+  );
+  await assertSucceeds(
+    deleteDoc(doc(db('bob'), 'interviewCalls', 'call', 'candidates', 'alice_0')),
+  );
+});
+test('interview calls: joined group members may call privately; invited or departed members cannot', async () => {
+  await env.withSecurityRulesDisabled((c) =>
+    setDoc(doc(c.firestore(), 'privateGroups', 'g'), {
+      name: 'Friends',
+      ownerId: 'alice',
+      memberIds: ['alice', 'bob', 'eve'],
+      joinedIds: ['alice', 'bob'],
+    }),
+  );
+  const ref = doc(db('alice'), 'interviewCalls', 'group-call');
+  await assertSucceeds(setDoc(ref, interviewData({ kind: 'group', contextId: 'g' })));
+  await assertFails(
+    setDoc(
+      doc(db('alice'), 'interviewCalls', 'invited'),
+      interviewData({ kind: 'group', contextId: 'g', toId: 'eve' }),
+    ),
+  );
+  await env.withSecurityRulesDisabled((c) =>
+    updateDoc(doc(c.firestore(), 'privateGroups', 'g'), { joinedIds: ['alice'] }),
+  );
+  await assertFails(
+    updateDoc(doc(db('bob'), 'interviewCalls', 'group-call'), {
+      status: 'accepted',
+      answer: { type: 'answer', sdp: 'answer' },
+    }),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('alice'), 'interviewCalls', 'departed'),
+      interviewData({ kind: 'group', contextId: 'g' }),
+    ),
+  );
+});
 before(async () => {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
   if (!host || !/^127\.0\.0\.1:8085$|^localhost:8085$/.test(host))

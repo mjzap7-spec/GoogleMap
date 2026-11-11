@@ -4,6 +4,7 @@ import React, { memo, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { colors } from '../../../shared/theme/colors';
 import { useReducedMotion } from '../../../shared/motion/useReducedMotion';
+import { useAppForeground } from '../../../shared/lifecycle/useAppForeground';
 import { mapDocument } from '../models/mapDocument';
 import type { MapCanvasProps, MapCommand } from '../models/map';
 import { MapControls } from './MapControls';
@@ -27,6 +28,8 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
   const [attempt, setAttempt] = useState(0);
   const positionLabel = t('Your GPS position');
   const reducedMotion = useReducedMotion() !== false;
+  const foreground = useAppForeground();
+  const active = props.active !== false && foreground;
   useEffect(() => {
     const receive = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow) return;
@@ -57,19 +60,27 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
     return () => window.removeEventListener('message', receive);
   }, []);
   useEffect(() => {
-    if (ready || error) return;
+    if (!active || ready || error) return;
     const timer = setTimeout(
       () => setError('The map could not load. Check your connection and retry.'),
       25000,
     );
     return () => clearTimeout(timer);
-  }, [ready, error, attempt]);
+  }, [active, ready, error, attempt]);
   useEffect(() => {
-    if (initialized && props.active !== false) {
+    if (initialized && !active)
+      frame.current?.contentWindow?.postMessage(
+        JSON.stringify({ id: ++sequence.current, type: 'visibility', active: false }),
+        '*',
+      );
+  }, [initialized, active]);
+  useEffect(() => {
+    if (initialized && active) {
       frame.current?.contentWindow?.postMessage(
         JSON.stringify({
           id: ++sequence.current,
           type: 'state',
+          active: true,
           language: props.state.language,
           testUserCount: props.state.testUserCount,
           positionLabel,
@@ -89,7 +100,7 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
       sentSharedTrail.current = props.sharedTrail;
     }
   }, [
-    props.active,
+    active,
     initialized,
     positionLabel,
     props.state.language,
@@ -102,7 +113,7 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
     reducedMotion,
   ]);
   const send = (command: MapCommand) => {
-    if (initialized && !error)
+    if (active && initialized && !error)
       frame.current?.contentWindow?.postMessage(
         JSON.stringify({ id: ++sequence.current, type: 'command', command }),
         '*',

@@ -11,6 +11,9 @@
     "types": ["node"]
   },
   "include": [
+    "src/features/interviews/models/**/*.ts",
+    "src/features/interviews/viewmodels/**/*.ts",
+    "src/features/interviews/data/PeerCallMedia.ts",
     "src/features/chat/data/**/*.ts",
     "src/features/chat/models/**/*.ts",
     "src/features/help/models/**/*.ts",

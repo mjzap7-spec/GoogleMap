@@ -76,6 +76,10 @@ export const topics = [
     'Local chat history',
     'Select one or more messages and tap the trash icon to delete them immediately on this device, without confirmation. Other participants keep their messages. The three-dot chat menu lets you clear the chat history. New messages still appear. Local deletion survives reopening the app, but clearing app storage or reinstalling resets it.',
   ],
+  [
+    'Interview calls',
+    'Open a private conversation and tap the camera button to choose voice or video. The other person can accept or decline. Both people must keep the app open. Use the microphone and camera controls during the call; End interview stops all capture. Group members can call each other privately.',
+  ],
 ] as const;
 export function screenHelp(path: string, section?: string) {
   if (path === '/contacts')

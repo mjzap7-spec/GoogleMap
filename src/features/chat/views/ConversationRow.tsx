@@ -78,32 +78,42 @@ export const ConversationRow = memo(function ConversationRow({
               )}
             </View>
           ) : (
-            <Avatar uri={item.avatarUrl} name={name} size={compact ? 42 : member ? 42 : 50} />
+            <Avatar uri={item.avatarUrl} name={name} size={compact || member ? 42 : 46} />
           )}
           {compact && <UnreadBadge count={unread} />}
         </View>
         <View style={compact ? s.compactLabel : s.identity}>
-          <Text
-            numberOfLines={compact ? 2 : 1}
-            style={[s.name, compact && s.small, active && s.selectedName, !!unread && s.unreadName]}
-          >
-            {name}
-          </Text>
-          {!compact && (
-            <Text numberOfLines={1} style={s.preview}>
-              {item.preview?.text === ''
-                ? t('Message deleted')
-                : (item.preview?.text ??
-                  t(room ? 'Group chat' : member ? 'Group member' : 'Contact'))}
+          <View style={!compact && s.headline}>
+            <Text
+              numberOfLines={compact ? 2 : 1}
+              style={[
+                s.name,
+                !compact && s.growing,
+                compact && s.small,
+                active && s.selectedName,
+                !!unread && s.unreadName,
+              ]}
+            >
+              {name}
             </Text>
+            {!compact && !!timestamp && (
+              <Text numberOfLines={1} style={[s.time, !!unread && s.unreadTime]}>
+                {timestamp}
+              </Text>
+            )}
+          </View>
+          {!compact && (
+            <View style={s.headline}>
+              <Text numberOfLines={1} style={[s.preview, s.growing]}>
+                {item.preview?.text === ''
+                  ? t('Message deleted')
+                  : (item.preview?.text ??
+                    t(room ? 'Group chat' : member ? 'Group member' : 'Contact'))}
+              </Text>
+              <UnreadBadge count={unread} inline />
+            </View>
           )}
         </View>
-        {!compact && (
-          <View style={s.metadata}>
-            {!!timestamp && <Text style={[s.time, !!unread && s.unreadTime]}>{timestamp}</Text>}
-            <UnreadBadge count={unread} inline />
-          </View>
-        )}
       </Pressable>
       {room && onToggleMembers && (
         <Pressable
@@ -144,7 +154,7 @@ const s = StyleSheet.create({
   container: {
     marginHorizontal: 20,
     marginBottom: 8,
-    borderRadius: 20,
+    borderRadius: 18,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
@@ -153,18 +163,18 @@ const s = StyleSheet.create({
   surface: { backgroundColor: colors.input },
   row: { alignItems: 'center', gap: 7, padding: 8, borderRadius: 16 },
   compact: { paddingVertical: 11, minHeight: 84 },
-  wide: { flex: 1, minWidth: 0, flexDirection: 'row', minHeight: 86, gap: 12, padding: 14 },
+  wide: { flex: 1, minWidth: 0, flexDirection: 'row', minHeight: 78, gap: 12, padding: 12 },
   member: { marginLeft: 36, backgroundColor: '#15171F', borderColor: '#232630' },
   selected: {
     backgroundColor: '#BCB5FF18',
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#BCB5FF28',
   },
   groupIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 18,
+    width: 46,
+    height: 46,
+    borderRadius: 16,
     backgroundColor: '#BCB5FF16',
     alignItems: 'center',
     justifyContent: 'center',
@@ -189,18 +199,13 @@ const s = StyleSheet.create({
     borderColor: colors.accent,
   },
   identity: { flex: 1, minWidth: 0, gap: 5 },
-  name: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  headline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  growing: { flex: 1, minWidth: 0 },
+  name: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: '600' },
   small: { fontSize: 11, lineHeight: 14, textAlign: 'center' },
   selectedName: { color: '#E7E3FF' },
   unreadName: { fontWeight: '700' },
   unreadTime: { color: colors.accent },
-  metadata: {
-    alignItems: 'flex-end',
-    alignSelf: 'stretch',
-    justifyContent: 'space-between',
-    paddingVertical: 3,
-    gap: 6,
-  },
   preview: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   time: { color: colors.muted, fontSize: 11, fontVariant: ['tabular-nums'] },
   toggle: {

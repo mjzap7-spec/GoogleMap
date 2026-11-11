@@ -27,6 +27,14 @@
     "plugins": [
       "expo-router",
       [
+        "expo-audio",
+        {
+          "microphonePermission": "Use your microphone during an interview you start or accept.",
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#101116",
@@ -39,8 +47,15 @@
         "expo-image-picker",
         {
           "photosPermission": "Choose a photo for your profile avatar.",
-          "microphonePermission": false,
-          "cameraPermission": false
+          "microphonePermission": "Use your microphone during an interview you start or accept.",
+          "cameraPermission": "Use your camera during a video interview you start or accept."
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Use your camera during a video interview you start or accept.",
+          "microphonePermission": "Use your microphone during an interview you start or accept."
         }
       ],
       "@react-native-community/datetimepicker",

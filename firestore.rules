@@ -344,6 +344,70 @@ service cloud.firestore {
      && request.resource.data.updatedAt==request.time;
    }
   }
+  // One-to-one interview signaling. Audio/video never passes through Firestore.
+  match /interviewCalls/{callId} {
+   function participant(d) { return signedIn() && request.auth.uid in [d.fromId,d.toId]; }
+   function contextAllowed(d) {
+    return (d.kind == 'contact' && connected(d.fromId,d.toId)
+     && get(/databases/$(database)/documents/users/$(d.fromId)/contacts/$(d.toId)).data.requestId == d.contextId
+     && get(/databases/$(database)/documents/users/$(d.toId)/contacts/$(d.fromId)).data.requestId == d.contextId
+     && get(/databases/$(database)/documents/contactRequests/$(d.contextId)).data.status == 'accepted')
+     || (d.kind == 'group'
+      && d.fromId in get(/databases/$(database)/documents/privateGroups/$(d.contextId)).data.joinedIds
+      && d.toId in get(/databases/$(database)/documents/privateGroups/$(d.contextId)).data.joinedIds);
+   }
+   function description(d, type) {
+    return d is map && d.keys().hasOnly(['type','sdp']) && d.type == type
+     && d.sdp is string && d.sdp.size()>0 && d.sdp.size()<=100000;
+   }
+   function validCreate(d) {
+    return d.keys().hasOnly(['fromId','toId','fromName','fromAvatar','kind','contextId','mode','status','offer','createdAt','expiresAt','validUntil'])
+     && d.fromId == request.auth.uid && d.toId is string && d.toId != d.fromId
+     && nameValid(d.fromName) && d.fromName == profile(d.fromId).fullName
+     && avatarValid(d.fromAvatar) && d.fromAvatar == profile(d.fromId).avatarUrl
+     && d.contextId is string && d.contextId.size()>0 && d.contextId.size()<=256
+     && d.mode in ['voice','video'] && d.status == 'ringing' && description(d.offer,'offer')
+     && d.createdAt == request.time
+     && d.expiresAt is timestamp && d.expiresAt>request.time && d.expiresAt<=request.time+duration.value(90,'s')
+     && d.validUntil is timestamp && d.validUntil>d.expiresAt && d.validUntil<=request.time+duration.value(7230,'s')
+     && contextAllowed(d);
+   }
+   function validAccept() {
+    return own(resource.data.toId) && resource.data.status == 'ringing'
+     && resource.data.expiresAt>request.time && contextAllowed(resource.data)
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','answer'])
+     && request.resource.data.status == 'accepted' && description(request.resource.data.answer,'answer');
+   }
+   function validEnd() {
+    return resource.data.status in ['ringing','accepted']
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','endedAt'])
+     && request.resource.data.endedAt == request.time
+     && (request.resource.data.status == 'ended' || (own(resource.data.toId)
+      && resource.data.status == 'ringing' && request.resource.data.status in ['declined','busy']));
+   }
+   allow get: if participant(resource.data);
+   allow list: if own(resource.data.toId) && request.query.limit<=10;
+   allow create: if signedIn() && validCreate(request.resource.data);
+   allow update: if participant(resource.data) && (validAccept() || validEnd());
+   allow delete: if false;
+   match /candidates/{candidateId} {
+    function call() { return get(/databases/$(database)/documents/interviewCalls/$(callId)).data; }
+    function validCandidate(d) {
+     return d.keys().hasOnly(['fromId','index','candidate','sdpMid','sdpMLineIndex'])
+      && d.fromId == request.auth.uid && d.index is int && d.index>=0 && d.index<64
+      && candidateId == request.auth.uid+'_'+string(d.index)
+      && d.candidate is string && d.candidate.size()>0 && d.candidate.size()<=8192
+      && (d.sdpMid == null || (d.sdpMid is string && d.sdpMid.size()<=256))
+      && (d.sdpMLineIndex == null || (d.sdpMLineIndex is int && d.sdpMLineIndex>=0 && d.sdpMLineIndex<=65535));
+    }
+    allow read: if participant(call());
+    allow create: if participant(call()) && contextAllowed(call()) && call().validUntil>request.time
+     && (call().status == 'accepted' || (call().status == 'ringing' && call().expiresAt>request.time))
+     && validCandidate(request.resource.data);
+    allow update: if false;
+    allow delete: if participant(call());
+   }
+  }
   match /sharedLocations/{userId} {
    function currentBucket() { return int(request.time.toMillis() / 120000); }
    function fresh() { return resource.data.bucket >= currentBucket()-1 && resource.data.bucket <= currentBucket(); }

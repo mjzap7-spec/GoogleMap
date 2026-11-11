@@ -41,7 +41,12 @@ export const ui = StyleSheet.create({
     color: colors.text,
     marginBottom: 16,
   },
-  inputFocused: { borderColor: colors.accent, backgroundColor: '#1E1F2C', outlineWidth: 0 },
+  inputFocused: {
+    borderColor: colors.accent,
+    backgroundColor: '#1E1F2C',
+    outlineStyle: 'solid',
+    outlineWidth: 0,
+  },
   link: { color: colors.accent, fontSize: 14, fontWeight: '500' },
   button: {
     minHeight: 56,

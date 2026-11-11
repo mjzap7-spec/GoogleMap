@@ -232,6 +232,10 @@ export function HomeView({
           <ContactsPanel
             {...contacts}
             listHeight={Math.max(68, Math.min(260, height - insets.top - insets.bottom - 440))}
+            onCall={(contact) => {
+              closeContacts();
+              contacts.onCall(contact);
+            }}
             onChat={(contact) => {
               closeContacts();
               contacts.onChat(contact);

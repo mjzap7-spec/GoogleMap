@@ -14,6 +14,7 @@ import {
   writeBatch,
   runTransaction,
   type Firestore,
+  type WriteBatch,
 } from 'firebase/firestore';
 import { getFirebaseApp, getFirebaseAuth } from '../../../config/firebase/client';
 import { historyFilter, newerTime, type LocalThreadHistory } from '../models/localChatHistory';
@@ -33,6 +34,59 @@ function sessionDatabase(uid: string) {
   if (getFirebaseAuth().currentUser?.uid !== uid) throw Error('Please sign in again.');
   return getFirestore(getFirebaseApp());
 }
+function transcript(db: Firestore, uid: string, peer: ChatPeer) {
+  if ('memberId' in peer) {
+    const [first, second] = [uid, peer.memberId].sort();
+    return collection(
+      db,
+      'privateGroups',
+      peer.groupId,
+      'memberChats',
+      first,
+      'with',
+      second,
+      'messages',
+    );
+  }
+  return 'groupId' in peer
+    ? collection(db, 'privateGroups', peer.groupId, 'messages')
+    : collection(db, 'contactRequests', peer.requestId, 'messages');
+}
+
+export function queueChatMessage(
+  batch: WriteBatch,
+  db: Firestore,
+  uid: string,
+  peer: ChatPeer,
+  text: string,
+  replyTo?: string,
+) {
+  const ref = doc(transcript(db, uid, peer));
+  if ('groupId' in peer) {
+    batch.set(ref, {
+      fromId: uid,
+      ...('senderName' in peer ? { senderName: peer.senderName } : {}),
+      text,
+      ...(replyTo ? { replyTo } : {}),
+      createdAt: serverTimestamp(),
+    });
+    return;
+  }
+  batch.set(ref, {
+    fromId: uid,
+    text,
+    createdAt: serverTimestamp(),
+    ...(replyTo ? { replyTo } : {}),
+  });
+  const preview = {
+    messageId: ref.id,
+    requestId: peer.requestId,
+    text,
+    updatedAt: serverTimestamp(),
+  };
+  batch.set(doc(db, 'users', uid, 'chatInbox', peer.peerId), preview);
+  batch.set(doc(db, 'users', peer.peerId, 'chatInbox', uid), preview);
+}
 export class FirebaseChatRepository implements ChatRepository {
   constructor(private database: (uid: string) => Firestore = sessionDatabase) {}
   members(uid: string, groupId: string, next: (rows: MemberCard[]) => void, fail: () => void) {
@@ -48,24 +102,6 @@ export class FirebaseChatRepository implements ChatRepository {
         ),
       fail,
     );
-  }
-  private transcript(db: Firestore, uid: string, peer: ChatPeer) {
-    if ('memberId' in peer) {
-      const [first, second] = [uid, peer.memberId].sort();
-      return collection(
-        db,
-        'privateGroups',
-        peer.groupId,
-        'memberChats',
-        first,
-        'with',
-        second,
-        'messages',
-      );
-    }
-    return 'groupId' in peer
-      ? collection(db, 'privateGroups', peer.groupId, 'messages')
-      : collection(db, 'contactRequests', peer.requestId, 'messages');
   }
   inbox(uid: string, next: (rows: ChatPreview[]) => void, fail: () => void) {
     return onSnapshot(
@@ -106,7 +142,7 @@ export class FirebaseChatRepository implements ChatRepository {
     );
   }
   private sharedReads(db: Firestore, uid: string, peer: ChatPeer) {
-    const parent = this.transcript(db, uid, peer).parent!;
+    const parent = transcript(db, uid, peer).parent!;
     return collection(parent, 'reads');
   }
   readByOthers(
@@ -155,7 +191,7 @@ export class FirebaseChatRepository implements ChatRepository {
     fail: () => void,
     history?: LocalThreadHistory,
   ) {
-    const messages = this.transcript(this.database(uid), uid, peer);
+    const messages = transcript(this.database(uid), uid, peer);
     const through = newerTime(after, history?.clearedThrough);
     const hidden = historyFilter(history);
     // The badge caps at 99+. This bounds the first read even for a long-lived group.
@@ -205,7 +241,7 @@ export class FirebaseChatRepository implements ChatRepository {
     const hidden = historyFilter(history);
     return onSnapshot(
       query(
-        this.transcript(this.database(uid), uid, peer),
+        transcript(this.database(uid), uid, peer),
         ...(after
           ? [where('createdAt', '>', new Timestamp(after.seconds, after.nanoseconds))]
           : []),
@@ -233,7 +269,7 @@ export class FirebaseChatRepository implements ChatRepository {
     history?: LocalThreadHistory,
   ) {
     const db = this.database(uid);
-    const ref = this.transcript(db, uid, peer);
+    const ref = transcript(db, uid, peer);
     const hidden = historyFilter(history);
     const after = history?.clearedThrough;
     let stopped = false;
@@ -344,32 +380,7 @@ export class FirebaseChatRepository implements ChatRepository {
   async send(uid: string, peer: ChatPeer, text: string, replyTo?: string) {
     const db = this.database(uid);
     const batch = writeBatch(db);
-    const ref = doc(this.transcript(db, uid, peer));
-    if ('groupId' in peer) {
-      batch.set(ref, {
-        fromId: uid,
-        ...('senderName' in peer ? { senderName: peer.senderName } : {}),
-        text,
-        ...(replyTo ? { replyTo } : {}),
-        createdAt: serverTimestamp(),
-      });
-      await batch.commit();
-      return;
-    }
-    batch.set(ref, {
-      fromId: uid,
-      text,
-      createdAt: serverTimestamp(),
-      ...(replyTo ? { replyTo } : {}),
-    });
-    const preview = {
-      messageId: ref.id,
-      requestId: peer.requestId,
-      text,
-      updatedAt: serverTimestamp(),
-    };
-    batch.set(doc(db, 'users', uid, 'chatInbox', peer.peerId), preview);
-    batch.set(doc(db, 'users', peer.peerId, 'chatInbox', uid), preview);
+    queueChatMessage(batch, db, uid, peer, text, replyTo);
     await batch.commit();
   }
   edit(uid: string, peer: ChatPeer, messageId: string, text: string) {
@@ -380,7 +391,7 @@ export class FirebaseChatRepository implements ChatRepository {
   }
   private async changeMessage(uid: string, peer: ChatPeer, messageId: string, text?: string) {
     const db = this.database(uid);
-    const ref = doc(this.transcript(db, uid, peer), messageId);
+    const ref = doc(transcript(db, uid, peer), messageId);
     await runTransaction(db, async (transaction) => {
       const message = await transaction.get(ref);
       if (!message.exists() || message.data().fromId !== uid) throw Error('Message unavailable');

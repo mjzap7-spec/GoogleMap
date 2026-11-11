@@ -19,6 +19,8 @@ import type { ContactRepository } from '../../contacts/models/contact';
 import { ContactsViewModel } from '../../contacts/viewmodels/ContactsViewModel';
 import { MapViewModel } from '../../map/viewmodels/MapViewModel';
 import type { MapPreferences } from '../../map/models/map';
+import type { InterviewRepository, CallMedia } from '../../interviews/models/interview';
+import { InterviewViewModel } from '../../interviews/viewmodels/InterviewViewModel';
 
 export interface AuthServices {
   repository: AuthRepository;
@@ -31,6 +33,8 @@ export interface AuthServices {
   developerTesting?: boolean;
   mapPreferences?: MapPreferences;
   locationTracker?: LocationTracker;
+  interviews?: InterviewRepository;
+  callMedia?: CallMedia;
 }
 
 /** Pure composition contract: adapters are selected by bootstrap, never by a View or hook. */
@@ -39,6 +43,8 @@ export function createAuthDependencies(services: AuthServices) {
   const language = new LanguageViewModel(services.mapPreferences);
   const session = new SessionViewModel(services.repository);
   return {
+    createInterviews: (uid: string, identity: () => { name: string; avatar: string | null }) =>
+      new InterviewViewModel(uid, identity, services.interviews, services.callMedia),
     createSharing: (user: AuthUser) => new SharingViewModel(services.sharing, user),
     createGroupRoster: (uid: string, groupId: string) =>
       new GroupRosterViewModel(chat, uid, groupId),

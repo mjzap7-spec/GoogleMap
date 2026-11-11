@@ -12,8 +12,10 @@ function fixture({
   fetchStyle,
   projectPeople = false,
   animateMarkers = false,
+  pixelRatio = 3,
 } = {}) {
   const events = {};
+  const documentEvents = {};
   const handlers = {};
   const moves = [];
   const popups = [];
@@ -31,7 +33,12 @@ function fixture({
   let frameTime = 0;
   let zoom = 12;
   let projections = 0;
+  let options;
+  let stops = 0;
   const map = {
+    stop() {
+      stops++;
+    },
     ...(projectPeople
       ? {
           project: ([x, y]) => {
@@ -98,6 +105,7 @@ function fixture({
   const parent = { postMessage: (value) => messages.push(JSON.parse(value)) };
   const window = {
     parent,
+    devicePixelRatio: pixelRatio,
     addEventListener: (name, fn) => {
       events[name] = fn;
     },
@@ -123,7 +131,10 @@ function fixture({
     clearTimeout: (callback) => timers.delete(callback),
     fetch: fetchStyle,
     document: {
-      addEventListener() {},
+      visibilityState: 'visible',
+      addEventListener(name, fn) {
+        documentEvents[name] = fn;
+      },
       createElement: () => ({
         style: {},
         children: [],
@@ -136,7 +147,8 @@ function fixture({
       }),
     },
     maplibregl: {
-      Map: function () {
+      Map: function (value) {
+        options = value;
         return map;
       },
       Marker,
@@ -156,6 +168,18 @@ function fixture({
   let id = 0;
   return {
     load,
+    options,
+    stops: () => stops,
+    frames,
+    move: () => {
+      handlers.move();
+      handlers.zoom();
+    },
+    finishMove: () => handlers.moveend(),
+    visibility: (value) => {
+      context.document.visibilityState = value;
+      documentEvents.visibilitychange();
+    },
     projections: () => projections,
     advanceFrame(ms) {
       frameTime += ms;
@@ -593,7 +617,7 @@ test('individual users become small points at low zoom and progressively reveal 
   assert.equal(f.messages.at(-1).userId, 'alice');
 });
 
-test('a failed Cloudinary marker uses its alternate HTTPS address and keeps the loaded photo on map updates', () => {
+test('Cloudinary markers request a thumbnail, fall back to the original and alternate host, and retain loaded photos', () => {
   const f = fixture();
   const user = {
     id: 'friend',
@@ -609,8 +633,13 @@ test('a failed Cloudinary marker uses its alternate HTTPS address and keeps the 
   assert.equal(avatar.children.length, 1, 'no image request for a low-zoom point');
   f.setZoom(16);
   const image = avatar.children[1];
-  assert.equal(image.src, user.avatarUrl);
+  assert.equal(
+    image.src,
+    'https://res.cloudinary.com/demo/image/upload/c_fill,w_96,h_96,q_auto,f_auto/v9/profile.jpg',
+  );
   assert.equal(image.style.visibility, 'hidden');
+  image.onerror();
+  assert.equal(image.src, user.avatarUrl);
   image.onerror();
   assert.equal(image.src, 'https://res-1.cloudinary.com/demo/image/upload/v9/profile.jpg');
   image.onload();
@@ -622,6 +651,93 @@ test('a failed Cloudinary marker uses its alternate HTTPS address and keeps the 
   send([{ ...user, avatarUrl: null }]);
   assert.equal(image.removed, true);
   assert.equal(avatar.children[0].textContent, 'J');
+});
+
+test('map framebuffer is bounded on dense screens without upscaling ordinary screens', () => {
+  assert.equal(fixture({ pixelRatio: 3 }).options.pixelRatio, 2);
+  assert.equal(fixture({ pixelRatio: 1 }).options.pixelRatio, 1);
+  assert.equal(fixture().options.maxTileCacheSize, 96);
+});
+
+test('500-person layout work is coalesced and throttled while gestures finish at the current zoom', () => {
+  const f = fixture({ projectPeople: true, animateMarkers: true });
+  const users = Array.from({ length: 500 }, (_, index) => ({
+    id: String(index),
+    nickname: 'Person ' + index,
+    avatarUrl: null,
+    latitude: 28,
+    longitude: -81,
+    expiresAt: Date.now() + 60000,
+  }));
+  f.send({ type: 'state', language: 'en', users });
+  const initial = f.projections();
+  for (let i = 0; i < 60; i++) {
+    f.move();
+    f.advanceFrame(17);
+  }
+  assert.ok(
+    f.projections() - initial <= 30 * 500,
+    'move and zoom events must not each relayout 500 people every frame',
+  );
+  const beforeEnd = f.projections();
+  f.finishMove();
+  assert.equal(f.projections(), beforeEnd + 500);
+  assert.equal(f.frames.size, 0, 'no recurring layout loop after the gesture');
+});
+
+test('hidden map cancels animation and retry work, then resumes from the latest authorized snapshot', () => {
+  const f = fixture({ projectPeople: true, animateMarkers: true });
+  f.setZoom(16);
+  const user = {
+    id: 'bob',
+    nickname: 'Bob',
+    avatarUrl: 'https://example.org/avatar.jpg',
+    latitude: 28,
+    longitude: -81,
+    trip: true,
+    expiresAt: Date.now() + 60000,
+  };
+  const state = { type: 'state', language: 'en', reducedMotion: false };
+  f.send({ ...state, users: [user] });
+  const marker = f.markers.find((m) => m.options.element);
+  f.send({ ...state, users: [{ ...user, latitude: 28.001 }] });
+  const image = marker.options.element.children[0].children[1];
+  image.onerror();
+  f.move();
+  assert.ok(f.frames.size > 0);
+  assert.equal(f.timers.size, 1);
+  f.send({ type: 'visibility', active: false });
+  assert.equal(f.frames.size, 0);
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.stops(), 1);
+  const projections = f.projections(),
+    handler = image.onerror;
+  f.move();
+  f.reconnect();
+  f.advanceFrame(1000);
+  f.send({ type: 'command', command: 'zoom-in' });
+  assert.equal(f.projections(), projections);
+  assert.equal(image.onerror, handler, 'background reconnect does not download avatars');
+  assert.equal(f.moves.length, 0);
+  f.send({ ...state, active: true, users: [{ ...user, latitude: 28.002 }] });
+  assert.equal(marker.position[1], 28.002, 'resume snaps to confirmed current fix');
+  assert.notEqual(image.onerror, handler, 'failed visible avatar can retry after returning');
+  f.send({ type: 'visibility', active: false });
+  f.send({ ...state, active: true, users: [] });
+  assert.equal(marker.removed, true, 'revoked users are removed on resume');
+});
+
+test('document visibility also suspends marker work without waiting for the native bridge', () => {
+  const f = fixture({ animateMarkers: true });
+  f.move();
+  f.visibility('hidden');
+  assert.equal(f.frames.size, 0);
+  assert.equal(f.stops(), 1);
+  f.move();
+  assert.equal(f.frames.size, 0);
+  f.visibility('visible');
+  f.move();
+  assert.equal(f.frames.size, 1);
 });
 
 test('failed photos retry once and on reconnect, and a removed marker cancels pending work', () => {

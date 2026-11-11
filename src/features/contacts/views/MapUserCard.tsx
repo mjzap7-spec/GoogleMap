@@ -8,18 +8,20 @@ import { colors } from '../../../shared/theme/colors';
 import { PrimaryButton } from '../../../shared/ui/PrimaryButton';
 import type { ContactsPanelProps } from './ContactsPanel';
 import type { ContactOverlayState } from '../viewmodels/contactSelectors';
-import { ChatIcon } from '../../../shared/ui/ChatIcon';
-import { UnreadBadge, chatButtonLabel } from '../../../shared/ui/UnreadBadge';
+import { UnreadBadge } from '../../../shared/ui/UnreadBadge';
+import { ContactQuickActions } from './ContactQuickActions';
 import { LocationUpdate } from './LocationUpdate';
 export function MapUserCard({
   state,
   commands,
   unread,
   onChat,
+  onCall,
 }: Pick<ContactsPanelProps, 'commands'> & {
   state: Readonly<ContactOverlayState>;
   unread: number;
   onChat?: () => void;
+  onCall?: () => void;
 }) {
   const { t } = useTranslation();
   const reduced = useReducedMotion();
@@ -61,21 +63,6 @@ export function MapUserCard({
               {!!contact && <Text style={styles.muted}>{t('In your contacts')}</Text>}
               {!!requested && !contact && <Text style={styles.muted}>{t('Request sent')}</Text>}
             </View>
-            {onChat && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={chatButtonLabel(
-                  t,
-                  t('Chat with {name}', { name: contact?.name || user?.nickname || '' }),
-                  unread,
-                )}
-                onPress={onChat}
-                disabled={state.mapRequestBusy}
-                style={({ pressed }) => [styles.chat, pressed && { opacity: 0.6 }]}
-              >
-                <ChatIcon unread={unread} />
-              </Pressable>
-            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('Close')}
@@ -86,7 +73,20 @@ export function MapUserCard({
               <Text style={styles.closeText}>×</Text>
             </Pressable>
           </View>
-          {!!user && <LocationUpdate user={user} />}
+          {!!user && (
+            <View style={styles.footer}>
+              <View style={styles.freshness}>
+                <LocationUpdate user={user} />
+              </View>
+              <ContactQuickActions
+                name={contact?.name || user.nickname}
+                unread={unread}
+                onCall={onCall}
+                onChat={onChat}
+                disabled={state.mapRequestBusy}
+              />
+            </View>
+          )}
           {state.loading && (
             <ActivityIndicator color={colors.accent} accessibilityLabel={t('Loading contacts')} />
           )}
@@ -123,38 +123,27 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    paddingHorizontal: 20,
+    paddingHorizontal: 14,
     backgroundColor: '#0004',
   },
   card: {
     width: '100%',
     maxWidth: 420,
     alignSelf: 'center',
-    padding: 20,
+    padding: 16,
     borderRadius: 30,
     backgroundColor: colors.input,
     borderWidth: 1,
     borderColor: colors.border,
     gap: 18,
   },
-  heading: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  avatar: { width: 56, height: 56, borderRadius: 28 },
-  initial: { backgroundColor: '#BCB5FF18', alignItems: 'center', justifyContent: 'center' },
-  initialText: { fontSize: 24, color: colors.accent, fontWeight: '600' },
-  identity: { flex: 1, gap: 5 },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  freshness: { flex: 1, minWidth: 0 },
+  identity: { flex: 1, minWidth: 0, gap: 5 },
   name: { fontSize: 20, fontWeight: '600', color: colors.text },
   muted: { color: colors.muted, fontSize: 13, lineHeight: 20 },
   close: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  chat: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#BCB5FF14',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
   closeText: { color: colors.muted, fontSize: 28 },
   error: { color: '#ffb4be', fontSize: 14, lineHeight: 21 },
 });

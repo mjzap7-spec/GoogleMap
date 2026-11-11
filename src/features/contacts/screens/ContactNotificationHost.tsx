@@ -5,13 +5,16 @@ import { selectContactOverlays } from '../viewmodels/contactSelectors';
 import { shallowEqual } from '../../../shared/mvvm/shallowEqual';
 import { ContactDialogs } from '../views/ContactDialogs';
 import { Feedback } from '../../../shared/ui/Feedback';
+import { useContactInterview } from '../../interviews/bindings/InterviewsProvider';
 import { usePersonChats } from '../../chat/bindings/usePersonChats';
 import { openPersonChat } from '../../chat/screens/openPersonChat';
 export function ContactNotificationHost() {
   const { state, commands } = useContactsSelection(selectContactOverlays, shallowEqual);
   const chats = usePersonChats();
+  const callContact = useContactInterview();
   const personId = state.selectedUser?.id;
   const chat = personId ? chats.get(personId) : undefined;
+  const contact = state.contacts.find((item) => item.peerId === personId && item.requestId);
   return (
     <>
       <Feedback
@@ -24,6 +27,14 @@ export function ContactNotificationHost() {
         state={state}
         commands={commands}
         unread={chat?.unread ?? 0}
+        onCall={
+          contact
+            ? () => {
+                commands.closeMapUser();
+                callContact(contact);
+              }
+            : undefined
+        }
         onChat={
           chat && personId
             ? () => {

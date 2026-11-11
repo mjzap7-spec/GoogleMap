@@ -252,8 +252,8 @@ const s = StyleSheet.create({
   title: { fontSize: 15, fontWeight: '600', color: colors.text },
   subtitle: { fontSize: 12, lineHeight: 18, color: colors.muted },
   value: { maxWidth: '40%', fontSize: 13, color: colors.muted, textAlign: 'right' },
-  profileCard: { backgroundColor: '#1B1D29', borderColor: '#363648', marginBottom: 26 },
-  profileHeader: { padding: 18, paddingVertical: 22, minHeight: 136, gap: 16 },
+  profileCard: { backgroundColor: '#1B1D29', borderColor: '#363648', marginBottom: 20 },
+  profileHeader: { padding: 16, paddingVertical: 18, minHeight: 116, gap: 12 },
   profileIcon: {
     width: 72,
     height: 72,

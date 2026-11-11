@@ -473,23 +473,25 @@ export class ChatViewModel extends ObservableViewModel<ChatState> {
       this.cancelAction();
       return;
     }
-    this.update({ sending: true, actionError: '' });
+    const { draft, replying } = this.state;
+    this.update({ sending: true, actionError: '', draft: editing ? draft : '' });
     try {
       if (editing) await this.repo.edit(this.uid, this.peer, editing.id, text);
-      else await this.repo.send(this.uid, this.peer, text, this.state.replying?.id);
+      else await this.repo.send(this.uid, this.peer, text, replying?.id);
       this.update({
+        sending: false,
         draft: editing ? this.draftBeforeEdit : '',
         editing: undefined,
         replying: undefined,
       });
     } catch {
       this.update({
+        sending: false,
+        draft,
         actionError: editing
           ? 'Message could not be edited. Try again.'
           : 'Message could not be sent. Try again.',
       });
-    } finally {
-      this.update({ sending: false });
     }
   };
 }

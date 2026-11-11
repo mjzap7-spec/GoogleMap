@@ -45,7 +45,7 @@ export function PrimaryButton({
     }
     Animated.timing(scale, {
       toValue: value,
-      duration: motion.buttonDuration,
+      duration: value === 1 ? motion.buttonReleaseDuration : motion.buttonDuration,
       easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
       isInteraction: false,

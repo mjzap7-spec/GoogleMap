@@ -106,6 +106,8 @@ const s = StyleSheet.create({
     color: colors.text,
     backgroundColor: 'transparent',
     borderWidth: 0,
+    // Web's automatic focus ring can ignore zero width; the container supplies it.
+    outlineStyle: 'solid',
     outlineWidth: 0,
   },
   icon: {

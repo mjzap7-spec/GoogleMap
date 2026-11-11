@@ -12,6 +12,8 @@ import { FirebaseContactRepository } from '../features/contacts/data/FirebaseCon
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StoredProfileCache } from '../features/auth/data/StoredProfileCache';
 import { StoredMapPreferences } from '../features/map/data/StoredMapPreferences';
+import { FirebaseInterviewRepository } from '../features/interviews/data/FirebaseInterviewRepository';
+import { DeviceCallMedia } from '../features/interviews/data/DeviceCallMedia';
 
 /** The only place selecting concrete authentication and device adapters. */
 export function createAppDependencies(overrides: Partial<AuthServices> = {}) {
@@ -30,6 +32,8 @@ export function createAppDependencies(overrides: Partial<AuthServices> = {}) {
     sharing: overrides.sharing ?? new FirebaseSharingRepository(),
     chat: new DeviceChatRepository(remoteChat, chatHistory),
     chatHistory,
+    interviews: overrides.interviews ?? new FirebaseInterviewRepository(),
+    callMedia: overrides.callMedia ?? new DeviceCallMedia(),
     contacts: overrides.contacts ?? new FirebaseContactRepository(),
     locationTracker: overrides.locationTracker ?? new ExpoLocationTracker(),
     mapPreferences: overrides.mapPreferences ?? new StoredMapPreferences(AsyncStorage),

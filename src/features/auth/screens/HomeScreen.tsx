@@ -11,6 +11,7 @@ import { SessionLoadingView } from '../views/SessionLoadingView';
 import { useContacts } from '../../contacts/bindings/useContacts';
 import { useMap } from '../../map/bindings/useMap';
 import { mapPeople, type MapPeopleFilter } from '../../map/models/mapPeople';
+import { useContactInterview } from '../../interviews/bindings/InterviewsProvider';
 import { usePersonChats } from '../../chat/bindings/usePersonChats';
 import { openPersonChat } from '../../chat/screens/openPersonChat';
 
@@ -45,6 +46,7 @@ function HomeContent({ error }: { error: string }) {
   const contacts = useContacts();
   const sharing = useSharing();
   const personChats = usePersonChats();
+  const onCall = useContactInterview();
   const [peopleFilter, setPeopleFilter] = useState<MapPeopleFilter>('all');
   const ownId = sharing.model.user.id;
   const testCount = map.state.testUserCount;
@@ -107,6 +109,7 @@ function HomeContent({ error }: { error: string }) {
         contacts={{
           ...contacts,
           personChats,
+          onCall,
           onShowAll: () => router.navigate('/contacts'),
           onChat: (contact) => {
             const chat = contact.peerId && personChats.get(contact.peerId);

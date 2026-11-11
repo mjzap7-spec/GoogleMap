@@ -5,7 +5,7 @@ export interface DraftSelection {
 }
 
 /** Native selection offsets use UTF-16, like JavaScript string slicing. */
-export function insertEmoji(draft: string, emoji: string, selection: DraftSelection) {
+function replacementRange(draft: string, selection: DraftSelection) {
   let start = Math.max(0, Math.min(draft.length, selection.start));
   let end = Math.max(start, Math.min(draft.length, selection.end));
   const splitsSurrogate = (position: number) =>
@@ -19,6 +19,17 @@ export function insertEmoji(draft: string, emoji: string, selection: DraftSelect
     if (splitsSurrogate(start)) start--;
     if (splitsSurrogate(end)) end++;
   }
+  return { start, end };
+}
+
+/** Calculate once per draft change, instead of constructing a string for every picker cell. */
+export function emojiInsertionCapacity(draft: string, selection: DraftSelection) {
+  const { start, end } = replacementRange(draft, selection);
+  return MAX_MESSAGE_LENGTH - draft.length + end - start;
+}
+
+export function insertEmoji(draft: string, emoji: string, selection: DraftSelection) {
+  const { start, end } = replacementRange(draft, selection);
   const text = draft.slice(0, start) + emoji + draft.slice(end);
   if (text.length > MAX_MESSAGE_LENGTH) return;
   const caret = start + emoji.length;

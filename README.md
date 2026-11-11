@@ -184,3 +184,7 @@ The map uses OpenStreetMap data through free OpenFreeMap vector tiles and MapLib
 The dark map keeps smooth gestures, animated large zoom/recenter buttons, and the device GPS marker with a travelled-path line. Language changes preserve the camera; local names appear when translations are unavailable. Reduced-motion settings are respected. Attribution remains visible. Internet and WebGL-capable graphics are required.
 
 See [map setup](docs/MAP_SETUP.md) for running and troubleshooting.
+
+## Voice and video interviews
+
+Open a private chat and tap the camera icon to start an in-app voice or video interview. The recipient can accept or decline; calls include mute, camera controls and hang up. Both participants must keep the app open. This requires the updated Firestore rules/indexes and a new native development build. See [interview setup, network requirements and testing](docs/INTERVIEW_SETUP.md). Public STUN is included; reliable calls across restrictive networks require a separately configured TURN relay.

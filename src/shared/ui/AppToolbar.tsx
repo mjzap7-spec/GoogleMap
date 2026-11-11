@@ -25,6 +25,7 @@ function useProgress(active: boolean, enabled: boolean) {
       duration: 120,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: nativeDriver,
+      isInteraction: false,
     });
     animation.start();
     return () => animation.stop();
@@ -78,11 +79,13 @@ function ToolbarButton({
         mass: 0.7,
         overshootClamping: true,
         useNativeDriver: nativeDriver,
+        isInteraction: false,
       }),
       Animated.timing(opacity, {
         toValue: down ? 0.76 : 1,
         duration: down ? 50 : 110,
         useNativeDriver: nativeDriver,
+        isInteraction: false,
       }),
     ]).start();
   };

@@ -1,5 +1,6 @@
 import { crowdLayoutSource } from './crowdLayout';
 import { mapStyleUrl } from './mapSource';
+import { avatarImageUrlSource } from '../../../shared/utils/avatarImageUrl';
 // The renderer sends only map state; no account credentials enter this document.
 export const mapDocument = String.raw`<!doctype html><html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
@@ -15,11 +16,30 @@ window.addEventListener('error',function(){report('fatal');});
 var earlyStyle=typeof fetch==='function'?fetch('${mapStyleUrl}').then(function(response){if(!response.ok)throw new Error('style');return response.json();}).catch(function(){return null;}):null;
 </script><script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js" onerror="report('fatal')"></script><script>
 (function(){try {
-var map=new maplibregl.Map({container:'map',style:earlyStyle?null:'${mapStyleUrl}',center:[0,20],zoom:2,minZoom:2,maxZoom:19,attributionControl:{compact:true},fadeDuration:180});
+// Bound framebuffer and tile memory on high-density phones without lowering camera frame rate.
+var map=new maplibregl.Map({container:'map',style:earlyStyle?null:'${mapStyleUrl}',center:[0,20],zoom:2,minZoom:2,maxZoom:19,attributionControl:{compact:true},fadeDuration:180,pixelRatio:Math.min(2,window.devicePixelRatio||1),maxTileCacheSize:96});
 var ready=false,lastId=0,state={language:'en',live:null,reducedMotion:true},targetZoom=null,labels=[],appliedLanguage=null,styleReady=false,liveMarker=null,livePopup=null,liveCentered=false,followGps=true,livePosition='',lastTrailKey='',peopleMarkers=new Map(),lastFocus=-1,lastSharedTrailKey='',lastTestCount=0;
+var hostActive=true;
+function isRendering(){return hostActive && document.visibilityState!=='hidden';}
+function pauseRendering(){
+ if(peopleFrame!=null)cancelAnimationFrame(peopleFrame);
+ peopleFrame=null;
+ renderedUsers=undefined;
+ map.stop();
+ peopleMarkers.forEach(function(entry){
+  if(entry.frame!=null)cancelAnimationFrame(entry.frame);
+  entry.frame=null;
+  if(Number.isFinite(entry.toLng) && Number.isFinite(entry.toLat)){
+   entry.lng=entry.toLng;entry.lat=entry.toLat;entry.marker.setLngLat([entry.lng,entry.lat]);
+  }
+  entry.fixTime=null;
+  clearTimeout(entry.retryTimer);entry.retryTimer=null;entry.detail=0;
+ });
+}
 function duration(value){return state.reducedMotion?0:value;}
 function language(){if(!styleReady||appliedLanguage===state.language)return;appliedLanguage=state.language;labels.forEach(function(layer){var code=state.language;var expression=code==='local'?['coalesce',['get','name'],['get','name:latin'],'']:['coalesce',['get','name:'+code],['get','name_'+code],['get','name'],['get','name:latin'],''];map.setLayoutProperty(layer,'text-field',expression);});}
 var layoutCrowd=(${crowdLayoutSource});
+var avatarImageUrl=(${avatarImageUrlSource});
 function clearAvatar(entry) {
   clearTimeout(entry.retryTimer);
   entry.retryTimer = null;
@@ -33,17 +53,28 @@ function clearAvatar(entry) {
   entry.failed = false;
 }
 function loadAvatar(entry, allowRetry) {
+  if(!isRendering())return;
   var image = entry.image, url = entry.url;
+  var thumbnail = avatarImageUrl(url,96);
+  var original = thumbnail !== url ? url : null;
   // Public Cloudinary uploads can also be served by the same provider's shared CDN shard.
   var alternate = /^https:\/\/res\.cloudinary\.com\/[\w-]+\/image\/upload\//.test(url)
     ? url.replace('https://res.cloudinary.com/', 'https://res-1.cloudinary.com/')
     : null;
   entry.failed = false;
   image.onload = function() {
-    if (entry.image === image) image.style.visibility = 'visible';
+    if (entry.image === image) { image.style.visibility = 'visible'; entry.failed = false; }
   };
   image.onerror = function() {
     if (entry.image !== image) return;
+    if (!isRendering()) { entry.failed = true; return; }
+    // Accounts that disallow unsigned transformations can still display the original photo.
+    if (original) {
+      var fallback = original;
+      original = null;
+      image.src = fallback;
+      return;
+    }
     if (alternate) {
       var next = alternate;
       alternate = null;
@@ -54,11 +85,11 @@ function loadAvatar(entry, allowRetry) {
     if (allowRetry) {
       entry.retryTimer = setTimeout(function() {
         entry.retryTimer = null;
-        if (entry.image === image && entry.detail > 0) loadAvatar(entry, false);
+        if (isRendering() && entry.image === image && entry.detail > 0) loadAvatar(entry, false);
       }, 3000);
     }
   };
-  image.src = url;
+  image.src = thumbnail;
 }
 function updateAvatar(entry, url, detail) {
   var wasVisible = entry.detail > 0;
@@ -84,6 +115,7 @@ function updateAvatar(entry, url, detail) {
   }
 }
 window.addEventListener('online', function() {
+  if(!isRendering())return;
   peopleMarkers.forEach(function(entry) {
     if (entry.failed && entry.detail > 0) {
       clearTimeout(entry.retryTimer);
@@ -116,6 +148,7 @@ function positionPerson(entry, longitude, latitude, trip) {
   }
   var start = performance.now();
   function frame(time) {
+    if(!isRendering()){entry.frame=null;return;}
     var t = Math.min(1, Math.max(0, (time - start) / 450));
     if (t === 1) { entry.frame = null; place(longitude, latitude); return; }
     place(fromLng + dx * t, fromLat + dy * t);
@@ -141,6 +174,7 @@ function updateFocus(){
   map.easeTo(camera);
 }
 function people(){
+ if(!isRendering())return;
  var zoom=map.getZoom(),detail=Math.max(0,Math.min(1,(zoom-14)/2)),size=Math.round(10+34*Math.max(0,Math.min(1,(zoom-13)/4)));
  var container=map.getContainer?map.getContainer():null,visible=[];
  var now=Date.now();
@@ -204,6 +238,7 @@ function directionImage(){
  return {width:size,height:size,data:data};
 }
 function render(){
+ if(!isRendering())return;
  language();var live=state.live,trail=state.trail||[];
  if(styleReady && ((state.sharedTrail||[]).length || map.getSource('shared-trip'))){
   if(!map.getSource('shared-trip')){renderedSharedTrail=null;lastSharedTrailKey='';map.addSource('shared-trip',{type:'geojson',data:{type:'FeatureCollection',features:[]}});map.addLayer({id:'shared-trip-line',type:'line',source:'shared-trip',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#BCB5FF','line-width':5,'line-opacity':0.9}});}
@@ -252,6 +287,7 @@ function receive(event){
  var message;try{message=typeof event.data==='string'?JSON.parse(event.data):event.data;}catch(_){return;}
  if(!message||!Number.isSafeInteger(message.id)||message.id<=lastId)return;
  lastId=message.id;
+ if(message.type==='visibility' && message.active===false){hostActive=false;pauseRendering();return;}
  if(message.type==='state'){
   if(['en','es','fr','de','zh','ja','local'].indexOf(message.language)<0)return;
   var testUserCount=message.testUserCount||0;
@@ -267,9 +303,11 @@ function receive(event){
   if(focus && (!Number.isSafeInteger(focus.revision)||!users.some(function(user){return user.id===focus.id && user.latitude===focus.latitude && user.longitude===focus.longitude;})))return;
   if(message.users!==undefined)users=users.slice().sort(function(a,b){return a.id.localeCompare(b.id);});
   if(lastTestCount && !testUserCount){lastTestCount=0;followGps=true;liveCentered=false;}
-  state={testUserCount:testUserCount,sharedTrail:sharedTrail,live:live,trail:trail,users:users,focus:focus,positionLabel:typeof message.positionLabel==='string'?message.positionLabel.slice(0,100):'Your GPS position',language:message.language,reducedMotion:message.reducedMotion!==false};render();return;
+  state={testUserCount:testUserCount,sharedTrail:sharedTrail,live:live,trail:trail,users:users,focus:focus,positionLabel:typeof message.positionLabel==='string'?message.positionLabel.slice(0,100):'Your GPS position',language:message.language,reducedMotion:message.reducedMotion!==false};
+  if(message.active===true && !hostActive){hostActive=true;map.resize();}
+  render();return;
  }
- if(message.type!=='command')return;
+ if(message.type!=='command'||!isRendering())return;
  if(message.command==='recenter' && state.live){followingTrip=false;followGps=true;targetZoom=null;map.easeTo({center:[state.live.longitude,state.live.latitude],zoom:16,duration:duration(300)});}
  else if(message.command==='zoom-in'||message.command==='zoom-out'){
   targetZoom=Math.max(2,Math.min(19,(targetZoom===null?map.getZoom():targetZoom)+(message.command==='zoom-in'?1:-1)));
@@ -277,15 +315,31 @@ function receive(event){
  }
 }
 window.addEventListener('message',receive);document.addEventListener('message',receive);
+document.addEventListener('visibilitychange',function(){if(!isRendering())pauseRendering();else{map.resize();render();}});
 map.on('movestart',function(event){if(event.originalEvent){targetZoom=null;followGps=false;followingTrip=false;}});
 map.on('style.load',function(){styleReady=true;appliedLanguage=null;labels=map.getStyle().layers.filter(function(layer){return layer.type==='symbol' && layer.layout && layer.layout['text-field'] && /name/.test(JSON.stringify(layer.layout['text-field']));}).map(function(layer){return layer.id;});render();});
-var peopleFrame=null;
-function schedulePeople(){if(peopleFrame!==null)return;if(typeof requestAnimationFrame!=='function'){people();return;}peopleFrame=requestAnimationFrame(function(){peopleFrame=null;people();});}
-map.on('move',schedulePeople);map.on('zoom',schedulePeople);map.on('zoomend',schedulePeople);map.on('moveend',schedulePeople);
+var peopleFrame=null,lastPeopleFrame=-Infinity;
+// Cluster layout runs at most 30 times/second while the map itself keeps animating smoothly.
+function schedulePeople(){
+ if(!isRendering()||peopleFrame!==null)return;
+ if(typeof requestAnimationFrame!=='function'){people();return;}
+ peopleFrame=requestAnimationFrame(function tick(time){
+  peopleFrame=null;
+  if(!isRendering())return;
+  if(time-lastPeopleFrame<1000/30){peopleFrame=requestAnimationFrame(tick);return;}
+  lastPeopleFrame=time;people();
+ });
+}
+function finishPeople(){
+ if(!isRendering())return;
+ if(peopleFrame!==null)cancelAnimationFrame(peopleFrame);
+ peopleFrame=null;people();
+}
+map.on('move',schedulePeople);map.on('zoom',schedulePeople);map.on('zoomend',finishPeople);map.on('moveend',finishPeople);
 map.on('load',function(){ready=true;report('ready');});
 map.on('error',function(){if(!styleReady)report('fatal');});
 report('initialized');
 if(earlyStyle)earlyStyle.then(function(style){map.setStyle(style||'${mapStyleUrl}');}).catch(function(){report('fatal');});
-window.addEventListener('resize',function(){map.resize();});
+window.addEventListener('resize',function(){if(isRendering())map.resize();});
 } catch(_){report('fatal');}})();
 </script></body></html>`;

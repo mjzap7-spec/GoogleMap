@@ -1,9 +1,7 @@
-import { Avatar } from '../../../shared/ui/Avatar';
-import { UnreadBadge, chatButtonLabel } from '../../../shared/ui/UnreadBadge';
 import type { PersonChat } from '../../chat/models/personChats';
-import { ChatIcon, EditIcon, InboxIcon } from '../../../shared/ui/ChatIcon';
+import { InboxIcon } from '../../../shared/ui/ChatIcon';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
-import React, { memo, useDeferredValue, useMemo, useState } from 'react';
+import React, { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, FlatList, StyleSheet, Text, View } from 'react-native';
 import type { Contact } from '../models/contact';
 import type { ContactsViewModel } from '../viewmodels/ContactsViewModel';
@@ -14,6 +12,10 @@ import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
 import { CollectionToolbar } from '../../../shared/ui/CollectionToolbar';
 import { InlineRetry } from '../../../shared/ui/InlineRetry';
 import { colors } from '../../../shared/theme/colors';
+import { useContactRowActions } from './useContactRowActions';
+import { ContactRow } from './ContactRow';
+
+const contactKey = (contact: Contact) => contact.id;
 export interface ContactsPanelProps {
   state: Readonly<ContactListState>;
   commands: Pick<
@@ -38,6 +40,7 @@ export interface ContactsPanelProps {
   fill?: boolean;
   onEdit: (contact: Contact) => void;
   onChat: (contact: Contact) => void;
+  onCall: (contact: Contact) => void;
   onShowAll?: () => void;
   onSelect: (contact: Contact) => void;
 }
@@ -49,6 +52,7 @@ export const ContactsPanel = memo(function ContactsPanel({
   commands,
   onEdit,
   onChat,
+  onCall,
   onShowAll,
   onSelect,
 }: ContactsPanelProps) {
@@ -65,6 +69,28 @@ export const ContactsPanel = memo(function ContactsPanel({
         ? state.contacts.filter((contact) => contact.name.toLocaleLowerCase().includes(term))
         : state.contacts,
     [state.contacts, term],
+  );
+  const actions = useContactRowActions(state.contacts, onSelect, onEdit, onChat, onCall);
+  const actionId = state.actionId;
+  const renderContact = useCallback(
+    ({ item }: { item: Contact }) => {
+      const chat = item.peerId ? personChats.get(item.peerId) : undefined;
+      return (
+        <ContactRow
+          id={item.id}
+          name={item.name}
+          avatarUrl={item.avatarUrl}
+          unread={chat?.unread ?? 0}
+          canChat={!!chat}
+          canCall={!!item.peerId && !!item.requestId}
+          locating={actionId === 'locate:' + item.id}
+          disabled={!!actionId}
+          card={fill}
+          actions={actions}
+        />
+      );
+    },
+    [personChats, actionId, fill, actions],
   );
   return (
     <View style={fill ? { flex: 1, minHeight: 0 } : { flexShrink: 1, minHeight: 0 }}>
@@ -109,7 +135,7 @@ export const ContactsPanel = memo(function ContactsPanel({
       <FlatList
         style={fill ? { flex: 1 } : { maxHeight: listHeight, minHeight: 0, flexShrink: 1 }}
         data={filteredContacts}
-        keyExtractor={(contact) => contact.id}
+        keyExtractor={contactKey}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         initialNumToRender={10}
@@ -127,64 +153,7 @@ export const ContactsPanel = memo(function ContactsPanel({
             />
           ) : undefined
         }
-        renderItem={({ item: contact }) => {
-          const chat = contact.peerId ? personChats.get(contact.peerId) : undefined;
-          const count = chat?.unread ?? 0;
-          const chatLabel = t('Chat with {name}', { name: contact.name });
-          return (
-            <View style={[styles.row, fill && styles.contactCard]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('Show {name} on map', { name: contact.name })}
-                onPress={() => onSelect(contact)}
-                disabled={!!state.actionId}
-                accessibilityState={{
-                  disabled: !!state.actionId,
-                  busy: state.actionId === 'locate:' + contact.id,
-                }}
-                style={({ pressed }) => [styles.person, pressed && styles.pressed]}
-              >
-                <View>
-                  <Avatar uri={contact.avatarUrl} name={contact.name} size={fill ? 48 : 40} />
-                  <UnreadBadge count={count} />
-                </View>
-                <Text style={styles.name} numberOfLines={1}>
-                  {contact.name}
-                </Text>
-                {state.actionId === 'locate:' + contact.id && (
-                  <ActivityIndicator color={colors.accent} size="small" />
-                )}
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('Edit {name}', { name: contact.name })}
-                onPress={() => onEdit(contact)}
-                style={({ pressed }) => [
-                  styles.edit,
-                  fill && styles.editSurface,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <EditIcon />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={chatButtonLabel(t, chatLabel, count)}
-                disabled={!chat}
-                accessibilityState={{ disabled: !chat }}
-                onPress={() => onChat(contact)}
-                style={({ pressed }) => [
-                  styles.edit,
-                  fill && styles.chatSurface,
-                  !chat && { opacity: 0.45 },
-                  pressed && styles.pressed,
-                ]}
-              >
-                <ChatIcon unread={count} />
-              </Pressable>
-            </View>
-          );
-        }}
+        renderItem={renderContact}
       />
       {!fill && (
         <View style={styles.dropdownActions}>
@@ -242,43 +211,7 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: colors.buttonText, fontSize: 10, fontWeight: '700' },
   pressed: { opacity: 0.65, backgroundColor: '#BCB5FF12' },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  contactCard: {
-    backgroundColor: colors.input,
-    borderWidth: 1,
-    borderColor: '#282B36',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 10,
-    gap: 6,
-  },
-  editSurface: { backgroundColor: '#242632', borderRadius: 14 },
-  chatSurface: { backgroundColor: '#BCB5FF18', borderRadius: 14 },
-  person: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 68,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: 12,
-  },
-  name: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '600' },
   accent: { color: colors.accent, fontSize: 14, fontWeight: '600' },
-  edit: {
-    borderRadius: 10,
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   add: {
     minHeight: 48,
     borderWidth: 1,

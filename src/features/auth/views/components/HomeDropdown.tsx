@@ -28,6 +28,7 @@ export const HomeDropdown = memo(
         duration: open ? 120 : 100,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: Platform.OS !== 'web',
+        isInteraction: false,
       });
       animation.start();
       return () => animation.stop();

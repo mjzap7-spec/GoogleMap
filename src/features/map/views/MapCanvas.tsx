@@ -14,6 +14,7 @@ import type WebView from 'react-native-webview';
 import type { WebViewProps } from 'react-native-webview';
 import { colors } from '../../../shared/theme/colors';
 import { useReducedMotion } from '../../../shared/motion/useReducedMotion';
+import { useAppForeground } from '../../../shared/lifecycle/useAppForeground';
 import { isMapAttributionLink, isMapDocument, mapDocumentBaseUrl } from '../models/mapSource';
 import { mapDocument } from '../models/mapDocument';
 import { mapConnectionError, mapResourceFailure } from '../models/mapFailure';
@@ -42,6 +43,8 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
   const [error, setError] = useState('');
   const positionLabel = t('Your GPS position');
   const reducedMotion = useReducedMotion() !== false;
+  const foreground = useAppForeground();
+  const active = props.active !== false && foreground;
   useEffect(() => {
     let active = true;
     Promise.resolve()
@@ -63,19 +66,26 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
     };
   }, [attempt]);
   useEffect(() => {
-    if (!Renderer || ready || error) return;
+    if (!active || !Renderer || ready || error) return;
     const timer = setTimeout(
       () => setError('The map could not load. Check your internet connection and retry.'),
       25000,
     );
     return () => clearTimeout(timer);
-  }, [Renderer, ready, error, attempt]);
+  }, [active, Renderer, ready, error, attempt]);
   useEffect(() => {
-    if (initialized && props.active !== false) {
+    if (initialized && !active)
+      view.current?.postMessage(
+        JSON.stringify({ id: ++sequence.current, type: 'visibility', active: false }),
+      );
+  }, [initialized, active]);
+  useEffect(() => {
+    if (initialized && active) {
       view.current?.postMessage(
         JSON.stringify({
           id: ++sequence.current,
           type: 'state',
+          active: true,
           language: props.state.language,
           testUserCount: props.state.testUserCount,
           positionLabel,
@@ -94,7 +104,7 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
       sentSharedTrail.current = props.sharedTrail;
     }
   }, [
-    props.active,
+    active,
     initialized,
     positionLabel,
     props.state.language,
@@ -121,15 +131,15 @@ export const MapCanvas = memo(function MapCanvas(props: MapCanvasProps) {
     setAttempt((value) => value + 1);
   }, []);
   useEffect(() => {
-    if (!error || !Renderer) return;
+    if (!error || !Renderer || props.active === false) return;
     // Retry after the user returns from fixing connectivity or date/time in Settings.
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') retry();
     });
     return () => subscription.remove();
-  }, [error, Renderer, retry]);
+  }, [error, Renderer, retry, props.active]);
   const send = (command: MapCommand) => {
-    if (initialized && !error)
+    if (active && initialized && !error)
       view.current?.postMessage(
         JSON.stringify({ id: ++sequence.current, type: 'command', command }),
       );

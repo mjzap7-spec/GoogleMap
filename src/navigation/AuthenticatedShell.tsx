@@ -13,24 +13,29 @@ import { useSession } from '../features/auth/bindings/useSession';
 import { MapToolbar } from '../features/map/screens/MapToolbar';
 import { MapProvider } from '../features/map/bindings/MapProvider';
 import { colors } from '../shared/theme/colors';
+import { InterviewsProvider } from '../features/interviews/bindings/InterviewsProvider';
+import { InterviewHost } from '../features/interviews/screens/InterviewHost';
 
 /** Persistent signed-in chrome sits outside the transitioning screen stack. */
 export function AuthenticatedShell({ children }: PropsWithChildren) {
   const { state } = useSession();
   if (!state.user) return <ShellFrame>{children}</ShellFrame>;
   return (
-    <MapProvider key={state.user.id}>
-      <ContactsProvider user={state.user}>
-        <SharingProvider user={state.user}>
-          <UnreadChatsProvider uid={state.user.id}>
-            <ShellFrame>
-              {children}
-              <ContactNotificationHost />
-            </ShellFrame>
-          </UnreadChatsProvider>
-        </SharingProvider>
-      </ContactsProvider>
-    </MapProvider>
+    <InterviewsProvider key={state.user.id} user={state.user}>
+      <MapProvider>
+        <ContactsProvider user={state.user}>
+          <SharingProvider user={state.user}>
+            <UnreadChatsProvider uid={state.user.id}>
+              <ShellFrame>
+                {children}
+                <ContactNotificationHost />
+                <InterviewHost />
+              </ShellFrame>
+            </UnreadChatsProvider>
+          </SharingProvider>
+        </ContactsProvider>
+      </MapProvider>
+    </InterviewsProvider>
   );
 }
 function ShellFrame({ children }: PropsWithChildren) {

@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   BackHandler,
   Keyboard,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,51 +14,7 @@ import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { colors } from '../../../shared/theme/colors';
 import { insertEmoji, MAX_MESSAGE_LENGTH, type DraftSelection } from '../models/messageDraft';
 import { useChatPress, useChatProgress, useMessageArrival } from './chatMotion';
-
-const emojis = [
-  '😀',
-  '😃',
-  '😁',
-  '😂',
-  '🤣',
-  '😊',
-  '😉',
-  '😍',
-  '🥰',
-  '😘',
-  '😎',
-  '🤔',
-  '😅',
-  '🤗',
-  '😴',
-  '😢',
-  '😭',
-  '😡',
-  '👍',
-  '👎',
-  '👏',
-  '🙌',
-  '🙏',
-  '💪',
-  '👋',
-  '❤️',
-  '💔',
-  '🔥',
-  '✨',
-  '🎉',
-  '✅',
-  '❌',
-  '💯',
-  '📍',
-  '🗺️',
-  '🚗',
-  '🏠',
-  '☕',
-  '🎂',
-  '🎁',
-  '🥳',
-  '🎶',
-];
+import { EmojiPicker } from './EmojiPicker';
 
 export function MessageComposer({
   height,
@@ -95,7 +50,6 @@ export function MessageComposer({
   const [caret, setCaret] = useState<DraftSelection>();
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [focused, setFocused] = useState(false);
-  const palette = useChatProgress(emojiOpen ? 1 : 0);
   const sendOpacity = useChatProgress(draft.trim() || sending ? 1 : 0.4, 120);
   const sendPress = useChatPress();
   const emojiPress = useChatPress();
@@ -114,57 +68,29 @@ export function MessageComposer({
     });
     return () => subscription.remove();
   }, [emojiOpen]);
-  const chooseEmoji = (emoji: string) => {
-    if (sending) return;
-    const result = insertEmoji(draft, emoji, selection);
-    if (!result) return;
-    setSelection(result.selection);
-    setCaret(result.selection);
-    onChangeText(result.text);
-  };
+  const closeEmoji = useCallback(() => setEmojiOpen(false), []);
+  const chooseEmoji = useCallback(
+    (emoji: string) => {
+      if (sending) return;
+      const result = insertEmoji(draft, emoji, selection);
+      if (!result) return;
+      setSelection(result.selection);
+      setCaret(result.selection);
+      onChangeText(result.text);
+    },
+    [draft, selection, sending, onChangeText],
+  );
   return (
     <Animated.View pointerEvents="box-none" style={[s.container, appearance]}>
-      <Animated.View
-        pointerEvents={emojiOpen ? 'auto' : 'none'}
-        accessibilityElementsHidden={!emojiOpen}
-        importantForAccessibility={emojiOpen ? 'auto' : 'no-hide-descendants'}
-        style={[
-          s.paletteContainer,
-          {
-            bottom: height + 8,
-            opacity: palette,
-            transform: [
-              { translateY: palette.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
-            ],
-          },
-        ]}
-      >
-        <View style={s.paletteHandle} />
-        <ScrollView
-          style={s.palette}
-          contentContainerStyle={s.emojis}
-          keyboardShouldPersistTaps="always"
-          accessibilityLabel={t('Emoji picker')}
-          showsVerticalScrollIndicator={false}
-        >
-          {emojis.map((emoji) => {
-            const disabled = sending || !insertEmoji(draft, emoji, selection);
-            return (
-              <Pressable
-                key={emoji}
-                accessibilityRole="button"
-                accessibilityLabel={t('Insert {emoji}', { emoji })}
-                disabled={disabled}
-                accessibilityState={{ disabled }}
-                onPress={() => chooseEmoji(emoji)}
-                style={({ pressed }) => [s.emoji, pressed && s.pressed, disabled && s.dim]}
-              >
-                <Text style={s.emojiText}>{emoji}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </Animated.View>
+      <EmojiPicker
+        open={emojiOpen}
+        bottom={height + 8}
+        draft={draft}
+        selection={selection}
+        sending={sending}
+        onChoose={chooseEmoji}
+        onClose={closeEmoji}
+      />
       <View
         style={s.composer}
         onLayout={(event) => onHeightChange(Math.ceil(event.nativeEvent.layout.height))}
@@ -227,6 +153,7 @@ export function MessageComposer({
               placeholderTextColor={colors.placeholder}
               keyboardAppearance="dark"
               selectionColor={colors.accent}
+              underlineColorAndroid="transparent"
               maxLength={MAX_MESSAGE_LENGTH}
               multiline
               editable={!sending}
@@ -322,29 +249,6 @@ const s = StyleSheet.create({
     paddingVertical: 1,
   },
   focused: { borderColor: '#BCB5FF65' },
-  paletteContainer: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    backgroundColor: '#20222D',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    elevation: 8,
-    boxShadow: '0px 6px 18px #00000040',
-  },
-  paletteHandle: {
-    width: 26,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: '#5D5B70',
-    alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 3,
-  },
-  palette: { maxHeight: 190 },
-  emojis: { flexDirection: 'row', flexWrap: 'wrap', padding: 6, justifyContent: 'center' },
   emoji: {
     width: 44,
     height: 44,
@@ -352,7 +256,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emojiText: { fontSize: 26 },
   active: { backgroundColor: '#BCB5FF18' },
   face: {
     width: 24,
@@ -378,6 +281,7 @@ const s = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minWidth: 0,
     minHeight: 44,
     maxHeight: 116,
     paddingLeft: 2,
@@ -387,6 +291,8 @@ const s = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     lineHeight: 21,
+    outlineStyle: 'solid',
+    outlineWidth: 0,
   },
   send: {
     height: 48,
@@ -421,6 +327,5 @@ const s = StyleSheet.create({
     borderColor: 'transparent',
     borderLeftColor: colors.accent,
   },
-  dim: { opacity: 0.45 },
   pressed: { opacity: 0.65 },
 });

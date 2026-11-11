@@ -76,8 +76,19 @@ export class GroupChatActivityViewModel extends ObservableViewModel<{
       current.stop?.();
       entries.delete(key);
     }
+    // Cached entries can outlive subscriptions while the app is backgrounded.
+    for (const key of entries.keys()) if (!active.has(key)) entries.delete(key);
     if (entries.size !== this.state.entries.size) this.update({ entries });
   };
 
-  stop = () => this.sync([]);
+  /** Suspend network work without blanking the list during a brief background transition. */
+  pause = () => {
+    const watches = [...this.watches.values()];
+    this.watches.clear();
+    watches.forEach((watch) => watch.stop?.());
+  };
+  stop = () => {
+    this.pause();
+    this.update({ entries: new Map() });
+  };
 }

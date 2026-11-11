@@ -34,6 +34,10 @@ import { ChatHistorySheet } from './ChatHistorySheet';
 import { MessageSelectionBar } from './MessageSelectionBar';
 import { useLayoutMotion } from '../../../shared/motion/useLayoutMotion';
 import { SelectionCheck } from './SelectionCheck';
+import { interviewInvitation } from '../../interviews/models/interview';
+import { CallIcon } from '../../interviews/views/CallIcon';
+import { AnimatedEmoji } from './AnimatedEmoji';
+import { messageEmoji } from '../models/messageEmoji';
 const readVisibility = { viewAreaCoveragePercentThreshold: 50, minimumViewTime: 250 };
 const scrollAnchor = { minIndexForVisible: 0, autoscrollToTopThreshold: 36 };
 export function MessagePane({
@@ -120,10 +124,30 @@ export function MessagePane({
           text: state.replying.text,
         }
       : undefined;
+  const sendError =
+    state.actionError === 'Message could not be sent. Try again.' ||
+    state.actionError === 'Message could not be edited. Try again.'
+      ? state.actionError
+      : '';
   const error = state.error || state.receiptError;
   return (
     <View style={[s.pane, { paddingBottom: state.selecting ? 0 : composerHeight }]}>
-      <Feedback source="chat-message-action" error={state.actionError} />
+      <Feedback source="chat-message-action" error={sendError ? '' : state.actionError} />
+      {!!sendError && !state.selecting && (
+        <View style={s.errorRow}>
+          <Text accessibilityRole="alert" style={s.error}>
+            {t(sendError)}
+          </Text>
+          <Pressable
+            style={s.link}
+            accessibilityRole="button"
+            disabled={state.sending || !state.draft.trim()}
+            onPress={commands.send}
+          >
+            <Text style={s.accent}>{t('Retry')}</Text>
+          </Pressable>
+        </View>
+      )}
       {state.selecting && (
         <MessageSelectionBar
           count={state.selectedIds.length}
@@ -165,11 +189,9 @@ export function MessagePane({
           <Text accessibilityRole="alert" style={s.error}>
             {t(error)}
           </Text>
-          {state.error !== 'Message could not be sent. Try again.' && (
-            <Pressable style={s.link} accessibilityRole="button" onPress={commands.start}>
-              <Text style={s.accent}>{t('Retry')}</Text>
-            </Pressable>
-          )}
+          <Pressable style={s.link} accessibilityRole="button" onPress={commands.start}>
+            <Text style={s.accent}>{t('Retry')}</Text>
+          </Pressable>
         </View>
       )}
       {!state.messages.length ? (
@@ -361,6 +383,7 @@ const MessageTimeline = memo(function MessageTimeline({
               text={item.text}
               sender={!mine && !joinedAbove ? item.senderName : undefined}
               stamp={item.pending ? t('Sending…') : clock.format(item.time)}
+              pending={item.pending}
               status={mine ? messageStatus(item, readThrough) : undefined}
             />
           </View>
@@ -377,6 +400,7 @@ const MessageBubble = memo(function MessageBubble({
   text,
   sender,
   stamp,
+  pending,
   status,
   id,
   onActions,
@@ -394,6 +418,7 @@ const MessageBubble = memo(function MessageBubble({
   text: string;
   sender?: string;
   stamp: string;
+  pending: boolean;
   status?: MessageStatus;
   id: string;
   onActions?: (id: string) => void;
@@ -408,6 +433,14 @@ const MessageBubble = memo(function MessageBubble({
   const { t } = useTranslation();
   const arrival = useMessageArrival(newest);
   const highlight = useChatProgress(selected ? 1 : 0, 160);
+  const interview =
+    text === interviewInvitation.voice
+      ? 'voice'
+      : text === interviewInvitation.video
+        ? 'video'
+        : undefined;
+  const emoji = interview ? undefined : messageEmoji(text);
+  const [replay, setReplay] = useState(0);
   return (
     <View style={s.messageRow}>
       <Animated.View
@@ -426,6 +459,7 @@ const MessageBubble = memo(function MessageBubble({
         <Animated.View
           style={[
             s.bubble,
+            interview && s.invitationBubble,
             mine ? s.out : s.incoming,
             joinedAbove && s.joined,
             joinedAbove && (mine ? s.outAbove : s.inAbove),
@@ -438,9 +472,11 @@ const MessageBubble = memo(function MessageBubble({
             onPress={
               selecting
                 ? () => onToggle?.(id)
-                : Platform.OS === 'web'
-                  ? () => onActions?.(id)
-                  : undefined
+                : emoji
+                  ? () => setReplay((value) => value + 1)
+                  : Platform.OS === 'web'
+                    ? () => onActions?.(id)
+                    : undefined
             }
             accessibilityRole={selecting ? 'checkbox' : onActions ? 'button' : undefined}
             accessibilityState={selecting ? { checked: selected } : undefined}
@@ -452,12 +488,35 @@ const MessageBubble = memo(function MessageBubble({
           >
             {!!sender && <Text style={s.sender}>{sender}</Text>}
             {reply && <ReplyPreview reply={reply} uid={uid} peerName={peerName} />}
-            <Text style={s.body}>{text}</Text>
-            <View style={s.metadata}>
-              {!!edited && <Text style={s.stamp}>{t('edited')}</Text>}
-              <Text style={s.stamp}>{stamp}</Text>
-              {status && status !== 'sending' && <MessageChecks read={status === 'read'} />}
-            </View>
+            {interview ? (
+              <View style={s.invitation}>
+                <View style={s.invitationIcon}>
+                  <CallIcon kind={interview} />
+                </View>
+                <View style={s.invitationDetails}>
+                  <Text style={s.invitationTitle}>
+                    {t(interview === 'voice' ? 'Voice interview' : 'Video interview')}
+                  </Text>
+                  <View style={s.invitationMeta}>
+                    <Text style={s.invitationLabel}>
+                      {pending ? stamp : t('Called at {time}', { time: stamp })}
+                    </Text>
+                    {status && status !== 'sending' && <MessageChecks read={status === 'read'} />}
+                  </View>
+                </View>
+              </View>
+            ) : emoji ? (
+              <AnimatedEmoji emoji={emoji} autoplay={newest} replay={replay} disabled={selecting} />
+            ) : (
+              <Text style={s.body}>{text}</Text>
+            )}
+            {!interview && (
+              <View style={s.metadata}>
+                {!!edited && <Text style={s.stamp}>{t('edited')}</Text>}
+                <Text style={s.stamp}>{stamp}</Text>
+                {status && status !== 'sending' && <MessageChecks read={status === 'read'} />}
+              </View>
+            )}
           </Pressable>
         </Animated.View>
       </View>
@@ -530,6 +589,26 @@ const s = StyleSheet.create({
   joined: { marginTop: 2 },
   outAbove: { borderTopRightRadius: 6 },
   inAbove: { borderTopLeftRadius: 6 },
+  invitationBubble: { paddingTop: 10, paddingBottom: 10 },
+  invitation: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  invitationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: '#14132160',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  invitationDetails: { flexShrink: 1 },
+  invitationTitle: { color: colors.text, fontWeight: '600', fontSize: 15 },
+  invitationMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: 6,
+    marginTop: 3,
+  },
+  invitationLabel: { color: '#D4CFE4', fontSize: 12, lineHeight: 17, flexShrink: 1 },
   body: { color: colors.text, fontSize: 15, lineHeight: 21 },
   sender: { color: colors.accent, fontWeight: '600', fontSize: 12, marginBottom: 4 },
   metadata: {

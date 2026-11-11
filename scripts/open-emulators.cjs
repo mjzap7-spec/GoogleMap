@@ -68,7 +68,7 @@ async function main(sharedPort, { bootMissing = false } = {}) {
         throw new Error(`Create ${name} in Android Studio Device Manager first.`);
       console.log(`Starting ${name}...`);
       const args = ['-avd', name];
-      if (name === 'Pixel_8a') args.push('-feature', '-WiFiPacketStream', '-no-snapshot-load');
+      if (name === 'Pixel_8a') args.push('-no-snapshot-load');
       const child = spawn(emulator, args, { detached: true, windowsHide: true, stdio: 'ignore' });
       await new Promise((resolve, reject) => {
         child.once('spawn', resolve);

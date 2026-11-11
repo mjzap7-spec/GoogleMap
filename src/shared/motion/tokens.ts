@@ -6,6 +6,7 @@ export const motion = {
   chatEnterDuration: 160,
   messageEnterDuration: 150,
   buttonDuration: 70,
+  buttonReleaseDuration: 130,
   buttonPressedScale: 0.985,
   feedbackEnterDuration: 100,
   feedbackExitDuration: 130,
