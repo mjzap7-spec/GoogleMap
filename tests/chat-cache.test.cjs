@@ -14,6 +14,8 @@ function fixture() {
         collection: (_db, ...path) => path.join('/'),
         query: (ref) => ref,
         orderBy: () => {},
+        where: () => {},
+        Timestamp: class {},
         limit: () => {},
         onSnapshot: (_ref, options, next, fail) => {
           assert.equal(options.includeMetadataChanges, true);
@@ -83,4 +85,18 @@ test('the direct inbox waits through an empty cache and receives a confirmed emp
   assert.equal(values.length, 0);
   subscriptions[0].next(snapshot(false));
   assert.deepEqual(values, [[]]);
+});
+
+test('unread keeps cached messages visible and clears only on a confirmed empty snapshot', () => {
+  const { repo, subscriptions } = fixture();
+  const values = [];
+  repo.unread('me', { peerId: 'bob', requestId: 'request' }, undefined, (count) =>
+    values.push(count),
+  );
+  const { next } = subscriptions[0];
+  next(snapshot(true, [message]));
+  next(snapshot(true));
+  assert.deepEqual(values, [1]);
+  next(snapshot(false));
+  assert.deepEqual(values, [1, 0]);
 });

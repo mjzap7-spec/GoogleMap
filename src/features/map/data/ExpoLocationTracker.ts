@@ -25,7 +25,9 @@ export class ExpoLocationTracker implements LocationTracker {
   async watch(onPoint: (point: TravelPoint) => void, onError: (message: string) => void) {
     let location: typeof import('expo-location');
     try {
-      location = await import('expo-location');
+      // Start permission checks without waiting for a separate Metro bundle.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      location = require('expo-location');
     } catch {
       throw new Error('Rebuild the installed app to enable device location.');
     }

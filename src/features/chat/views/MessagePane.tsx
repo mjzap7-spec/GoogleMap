@@ -38,7 +38,8 @@ import { interviewInvitation } from '../../interviews/models/interview';
 import { CallIcon } from '../../interviews/views/CallIcon';
 import { AnimatedEmoji } from './AnimatedEmoji';
 import { messageEmoji } from '../models/messageEmoji';
-const readVisibility = { viewAreaCoveragePercentThreshold: 50, minimumViewTime: 250 };
+// Commit reads as soon as a message is on screen, including partially visible long rows.
+const readVisibility = { viewAreaCoveragePercentThreshold: 1 };
 const scrollAnchor = { minIndexForVisible: 0, autoscrollToTopThreshold: 36 };
 export function MessagePane({
   uid,

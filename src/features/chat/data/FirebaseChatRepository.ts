@@ -205,14 +205,18 @@ export class FirebaseChatRepository implements ChatRepository {
     );
     return onSnapshot(
       unseen,
-      (snap) =>
+      { includeMetadataChanges: true },
+      (snap) => {
+        // An empty local cache can precede the server's unread result.
+        if (snap.empty && snap.metadata.fromCache) return;
         next(
           Math.min(
             100,
             snap.docs.filter((item) => !hidden({ id: item.id, createdAt: item.data().createdAt }))
               .length,
           ),
-        ),
+        );
+      },
       fail,
     );
   }

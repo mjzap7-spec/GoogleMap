@@ -62,7 +62,7 @@ export function mapPeople(
   const selected = [groupFocus, contactFocus].find(
     (person) => person && person.id !== ownId && person.expiresAt > now && included(person.id),
   );
-  const names = new Map(contacts.map((contact) => [contact.peerId, contact.name]));
+  const contactsById = new Map(contacts.map((contact) => [contact.peerId, contact]));
   const people = new Map<string, MapUserMarker>();
   // Reserve space for the selected person and joined groups before filling the nearby layer.
   for (const person of [selected, ...trips.values(), ...groupLocations, ...nearby]) {
@@ -76,10 +76,11 @@ export function mapPeople(
       continue;
     const { id, nickname, avatarUrl, latitude, longitude, expiresAt, updatedAt } =
       trips.get(person.id) ?? person;
+    const contact = contactsById.get(id);
     people.set(id, {
       id,
-      nickname: names.get(id) ?? nickname,
-      avatarUrl,
+      nickname: contact?.name ?? nickname,
+      avatarUrl: contact?.avatarUrl === undefined ? avatarUrl : contact.avatarUrl,
       latitude,
       longitude,
       expiresAt,

@@ -93,18 +93,22 @@ export class FirebaseSharingRepository implements SharingRepository {
       const groups = await getDocs(
         query(collection(db, 'privateGroups'), where('memberIds', 'array-contains', userId)),
       );
-      for (const group of groups.docs.filter((group) => group.data().joinedIds.includes(userId))) {
-        const ref = doc(db, 'privateGroups', group.id, 'live', userId);
-        await runTransaction(db, async (transaction) => {
-          const preferences = await transaction.get(
-            doc(db, 'users', userId, 'preferences', 'sharing'),
-          );
-          if (preferences.data()?.groups === true) return;
-          const location = await transaction.get(ref);
-          if (location.exists() && (stopTrips || location.data().trip !== true))
-            transaction.delete(ref);
-        });
-      }
+      const joined = groups.docs.filter((group) => group.data().joinedIds.includes(userId));
+      await Promise.all(
+        joined.map((group) => {
+          const ref = doc(db, 'privateGroups', group.id, 'live', userId);
+          const preferencesRef = doc(db, 'users', userId, 'preferences', 'sharing');
+          return runTransaction(db, async (transaction) => {
+            const [current, location] = await Promise.all([
+              transaction.get(preferencesRef),
+              transaction.get(ref),
+            ]);
+            if (current.data()?.groups === true) return;
+            if (location.exists() && (stopTrips || location.data().trip !== true))
+              transaction.delete(ref);
+          });
+        }),
+      );
     }
   }
   observeGroups(

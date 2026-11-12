@@ -397,6 +397,40 @@ test('exact email lookup is available but directory scans and private profiles a
     }),
   );
 });
+test('contact list avatars update without reopening Contacts', { timeout: 20000 }, async (t) => {
+  await request();
+  await accept();
+  const alice = db('alice'),
+    bob = db('bob');
+  const client = require('../../.test-build/config/firebase/client');
+  t.mock.method(client, 'getFirebaseAuth', () => ({ currentUser: { uid: 'alice' } }));
+  const {
+    FirebaseContactRepository,
+  } = require('../../.test-build/features/contacts/data/FirebaseContactRepository');
+  const repo = new FirebaseContactRepository();
+  t.mock.method(repo, 'database', () => alice);
+  const avatarUrl = 'https://example.com/new-avatar.png';
+  let changed = false;
+  const row = await new Promise((resolve, reject) => {
+    t.after(
+      repo.observe(
+        'alice',
+        (rows) => {
+          const contact = rows.find((item) => item.peerId === 'bob');
+          if (!contact?.fullName) return;
+          if (contact.avatarUrl === avatarUrl) resolve(contact);
+          if (!changed) {
+            changed = true;
+            void updateDoc(doc(bob, 'users', 'bob'), { avatarUrl }).catch(reject);
+          }
+        },
+        reject,
+      ),
+    );
+  });
+  assert.equal(row.avatarUrl, avatarUrl);
+});
+
 test(
   'an open contact editor receives live profile edits from its connected peer',
   { timeout: 20000 },

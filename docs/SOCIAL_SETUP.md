@@ -69,7 +69,7 @@ New users must use the updated app. There is no Admin SDK credential, private ke
 
 ## Firestore connection timeout on Android/iOS
 
-The native app initializes Firestore with long polling and a five-second poll timeout before starting profile, contact, or location listeners. Web keeps the default browser transport. Some emulator networks and Expo's native network inspector buffer responses until they close; the shorter poll timeout lets those responses complete before Firestore's ten-second initial connection deadline.
+The native app uses Firestore streaming and enables automatic long-polling detection for buffering networks. When the SDK switches to long polling, polls use a five-second timeout. Web keeps the default browser transport.
 
 Android development builds also bypass Expo's response-body inspector specifically for `firestore.googleapis.com`, so its WebChannel streams can be consumed immediately. Other hosts retain inspection, and release builds do not install this hook. The `withFirestoreStreaming` config plugin preserves it through prebuild. Rebuild/reinstall the development app when this native hook changes. The development console logs `[Firebase] Profile server connection ready` once a server-backed profile snapshot arrives; it contains no profile data or credentials.
 

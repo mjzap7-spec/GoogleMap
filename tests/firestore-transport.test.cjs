@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('node:module');
 
-test('native Firestore uses long polling while browsers retain their default transport', () => {
+test('native Firestore detects buffering and browsers retain their default transport', () => {
   const calls = [];
   const app = { name: '[DEFAULT]' };
   const database = {};
@@ -34,7 +34,7 @@ test('native Firestore uses long polling while browsers retain their default tra
     {
       selected: app,
       settings: {
-        experimentalForceLongPolling: true,
+        experimentalAutoDetectLongPolling: true,
         experimentalLongPollingOptions: { timeoutSeconds: 5 },
       },
     },

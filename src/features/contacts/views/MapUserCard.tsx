@@ -50,7 +50,7 @@ export function MapUserCard({
           <View style={styles.heading}>
             <View>
               <Avatar
-                uri={user?.avatarUrl}
+                uri={contact?.avatarUrl === undefined ? user?.avatarUrl : contact.avatarUrl}
                 name={contact?.name || user?.nickname || ''}
                 size={56}
               />

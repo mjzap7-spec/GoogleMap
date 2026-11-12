@@ -58,7 +58,11 @@ function memberRow(
   return {
     key: memberKey(groupId, id),
     name: contact?.name ?? own?.fullName ?? card?.name ?? '',
-    avatarUrl: own?.avatarUrl ?? card?.avatarUrl ?? contact?.avatarUrl,
+    avatarUrl: own
+      ? own.avatarUrl
+      : contact?.avatarUrl === undefined
+        ? card?.avatarUrl
+        : contact.avatarUrl,
     target: { groupId, memberId: id },
   };
 }

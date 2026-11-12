@@ -115,7 +115,7 @@ export class FirebaseContactRepository implements ContactRepository {
     let previousContacts: string | undefined;
     type ProfileSummary = Pick<Contact, 'avatarUrl' | 'fullName' | 'birthday' | 'profileLocation'>;
     const profiles = new Map<string, ProfileSummary>();
-    const fetching = new Map<string, Promise<void>>();
+    const profileWatches = new Map<string, { stop?: () => void }>();
     let currentRows: Contact[] = [];
     let confirmed = new Map<string, Contact>();
     let scheduled: ReturnType<typeof setTimeout> | undefined;
@@ -164,14 +164,32 @@ export class FirebaseContactRepository implements ContactRepository {
           currentRows = contacts;
           confirmed = new Map(contacts.map((contact) => [contact.id, contact]));
           const ids = new Set(contacts.flatMap((c) => (c.peerId ? [c.peerId] : [])));
-          for (const id of profiles.keys()) if (!ids.has(id)) profiles.delete(id);
-          for (const id of fetching.keys()) if (!ids.has(id)) fetching.delete(id);
+          for (const [id, watch] of profileWatches) {
+            if (ids.has(id)) continue;
+            profileWatches.delete(id);
+            profiles.delete(id);
+            watch.stop?.();
+          }
           emit();
           for (const id of ids) {
-            if (profiles.has(id) || fetching.has(id)) continue;
-            const request: Promise<void> = getDoc(doc(this.database(), 'users', id))
-              .then((snapshot) => {
-                if (!active || fetching.get(id) !== request || !snapshot.exists()) return;
+            if (profileWatches.has(id)) continue;
+            const watch: { stop?: () => void } = {};
+            profileWatches.set(id, watch);
+            const publishProfile = () => {
+              if (scheduled) return;
+              scheduled = setTimeout(() => {
+                scheduled = undefined;
+                emit();
+              }, 16);
+            };
+            watch.stop = onSnapshot(
+              doc(this.database(), 'users', id),
+              (snapshot) => {
+                if (!active || profileWatches.get(id) !== watch) return;
+                if (!snapshot.exists()) {
+                  if (profiles.delete(id)) publishProfile();
+                  return;
+                }
                 const p = snapshot.data();
                 profiles.set(id, {
                   fullName: p.fullName,
@@ -179,17 +197,13 @@ export class FirebaseContactRepository implements ContactRepository {
                   birthday: p.birthday,
                   profileLocation: p.location,
                 });
-                if (!scheduled)
-                  scheduled = setTimeout(() => {
-                    scheduled = undefined;
-                    emit();
-                  }, 16);
-              })
-              .catch(() => {})
-              .finally(() => {
-                if (fetching.get(id) === request) fetching.delete(id);
-              });
-            fetching.set(id, request);
+                publishProfile();
+              },
+              () => {
+                if (active && profileWatches.get(id) === watch && profiles.delete(id))
+                  publishProfile();
+              },
+            );
           }
         },
         (reason) => error(failure(reason)),
@@ -198,6 +212,8 @@ export class FirebaseContactRepository implements ContactRepository {
         active = false;
         clearTimeout(scheduled);
         stop();
+        for (const watch of profileWatches.values()) watch.stop?.();
+        profileWatches.clear();
       };
     } catch (reason) {
       error(failure(reason));
@@ -557,9 +573,10 @@ export class FirebaseContactRepository implements ContactRepository {
         await deleteDoc(ref);
         return;
       }
-      await this.clock.synchronize(true);
-      this.check(userId);
-      const profile = await getDoc(doc(db, 'users', userId));
+      const [, profile] = await Promise.all([
+        this.clock.synchronize(),
+        getDoc(doc(db, 'users', userId)),
+      ]);
       this.check(userId);
       const p = profile.data();
       if (!p?.fullName) throw new ContactFailure('Complete your profile before sharing.');
