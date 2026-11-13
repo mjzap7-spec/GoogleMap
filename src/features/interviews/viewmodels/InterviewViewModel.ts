@@ -107,8 +107,10 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
             },
           });
           this.observe(call);
-          if (this.state.phase === 'incoming')
+          if (this.state.phase === 'incoming') {
+            void this.devices?.prepare?.().catch(() => {});
             this.arm(Math.max(0, call.expiresAt - this.now()), 'No answer');
+          }
           break;
         }
       },
@@ -135,6 +137,7 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
     if (!this.foreground || target.id === this.uid || !['idle', 'ended'].includes(this.state.phase))
       return;
     this.release();
+    void this.devices?.prepare?.().catch(() => {});
     this.update({
       phase: 'choose',
       target,
@@ -158,13 +161,13 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
     const version = ++this.revision;
     this.arm(30000, 'Could not start the interview. Check permissions and connection.');
     try {
-      const [media] = await Promise.all([
-        this.openMedia(version, mode),
+      const [offer] = await Promise.all([
+        this.openMedia(version, mode).then((media) => {
+          if (media && version === this.revision) return media.offer();
+        }),
         this.repo?.prepare?.(this.uid),
       ]);
-      if (!media || version !== this.revision) return;
-      const offer = await media.offer();
-      if (version !== this.revision) return;
+      if (!offer || version !== this.revision) return;
       const identity = this.identity();
       if (!this.repo) throw Error();
       const call = await this.repo.create(
@@ -198,11 +201,13 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
     const version = this.revision;
     this.arm(30000, 'The call could not connect. Check your internet connection and try again.');
     try {
-      const media = await this.openMedia(version, call.mode);
-      if (!media || version !== this.revision) return;
-      const answer = await media.answer(call.offer);
-      if (version !== this.revision) return;
-      this.watchCandidates(call, version);
+      const offer = call.offer;
+      const answerReady = this.openMedia(version, call.mode).then((media) => {
+        if (media && version === this.revision) return media.answer(offer);
+      });
+      this.watchCandidates(call, version, answerReady);
+      const answer = await answerReady;
+      if (!answer || version !== this.revision) return;
       if (version !== this.revision) return;
       await this.repo!.accept(this.uid, call.id, answer);
       if (version !== this.revision) {
@@ -215,8 +220,17 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
       if (version === this.revision) this.fail(error);
     }
   };
-  decline = () => this.end('Interview declined', 'declined');
+  decline = () => {
+    const call = this.state.call;
+    if (this.state.phase !== 'incoming' || !call) return;
+    this.ignore(call.id);
+    this.release();
+    this.update({ phase: 'idle', call: undefined, target: undefined, error: '', result: '' });
+    void this.repo?.finish(this.uid, call.id, 'declined').catch(() => {});
+  };
   hangUp = () => this.end('Interview ended');
+  watchHistory = (id: string, next: Parameters<NonNullable<InterviewRepository['history']>>[2]) =>
+    this.repo?.history?.(this.uid, id, next);
   dismiss = () => {
     if (this.state.phase === 'choose' || this.state.phase === 'ended') {
       this.release();
@@ -279,6 +293,8 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
           clearTimeout(this.disconnectTimer);
           this.disconnectTimer = undefined;
           this.update({ phase: 'connected' });
+          const call = this.state.call;
+          if (call) void this.repo?.connected?.(this.uid, call.id).catch(() => {});
           this.arm(
             Math.max(0, (this.state.call?.validUntil ?? this.now() + 7200000) - this.now()),
             'Interview ended',
@@ -343,13 +359,11 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
             30000,
             'The call could not connect. Check your internet connection and try again.',
           );
-          void this.media!.applyAnswer(next.answer)
-            .then(() => {
-              if (version === this.revision) this.watchCandidates(next, version);
-            })
-            .catch((error) => {
-              if (version === this.revision) this.fail(error);
-            });
+          const ready = this.media!.applyAnswer(next.answer);
+          this.watchCandidates(next, version, ready);
+          void ready.catch((error) => {
+            if (version === this.revision) this.fail(error);
+          });
         }
       },
       () => {
@@ -359,7 +373,7 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
     if (version === this.revision) this.callStops.push(stop);
     else stop();
   }
-  private watchCandidates(call: InterviewCall, version: number) {
+  private watchCandidates(call: InterviewCall, version: number, ready: Promise<unknown>) {
     let queue = Promise.resolve();
     const stop = this.repo!.candidates(
       this.uid,
@@ -368,6 +382,7 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
       (candidate) => {
         queue = queue
           .then(async () => {
+            await ready;
             if (version === this.revision) await this.media?.addCandidate(candidate);
           })
           .catch(() => {
@@ -410,7 +425,7 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
         : 'Could not start the interview. Check permissions and connection.',
     );
   }
-  private end(result: string, status: 'ended' | 'declined' = 'ended') {
+  private end(result: string) {
     const call = this.state.call;
     if (call) this.ignore(call.id);
     this.release();
@@ -418,9 +433,9 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
       phase: 'ended',
       call: undefined,
       result,
-      error: status === 'ended' && result !== 'Interview ended' ? result : '',
+      error: result !== 'Interview ended' ? result : '',
     });
-    if (call) void this.repo?.finish(this.uid, call.id, status).catch(() => {});
+    if (call) void this.repo?.finish(this.uid, call.id, 'ended').catch(() => {});
   }
   private arm(ms: number, result: string) {
     clearTimeout(this.timer);

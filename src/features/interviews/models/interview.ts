@@ -1,11 +1,17 @@
 import type { ChatPeer } from '../../chat/models/chat';
 
 export type InterviewMode = 'voice' | 'video';
+export const callMessagePrefix = 'call_';
 export const interviewInvitation: Record<InterviewMode, string> = {
   voice: 'Voice interview invitation',
   video: 'Video interview invitation',
 };
 export type CallStatus = 'ringing' | 'accepted' | 'declined' | 'ended' | 'busy';
+export interface CallHistory {
+  status: CallStatus;
+  answered: boolean;
+  durationSeconds?: number;
+}
 export interface InterviewTarget {
   id: string;
   name: string;
@@ -38,6 +44,8 @@ export interface InterviewCall {
   answer?: CallDescription;
 }
 export interface InterviewRepository {
+  connected?(uid: string, id: string): Promise<void>;
+  history?(uid: string, id: string, next: (history: CallHistory | undefined) => void): () => void;
   prepare?(uid: string): Promise<void>;
   incoming(uid: string, next: (calls: InterviewCall[]) => void, fail: () => void): () => void;
   create(
@@ -86,6 +94,7 @@ export interface CallMediaSession {
   close(): void;
 }
 export interface CallMedia {
+  prepare?(): Promise<unknown>;
   open(mode: InterviewMode, events: CallMediaEvents): Promise<CallMediaSession>;
 }
 export function interviewTarget(

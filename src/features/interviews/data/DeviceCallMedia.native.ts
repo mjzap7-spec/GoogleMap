@@ -5,6 +5,7 @@ import { openPeerMedia, type RtcRuntime } from './PeerCallMedia';
 import { callIceServers } from './callIceServers';
 
 export class DeviceCallMedia implements CallMedia {
+  prepare = callIceServers;
   open: CallMedia['open'] = async (mode, events) => {
     let runtime: typeof import('react-native-webrtc');
     try {

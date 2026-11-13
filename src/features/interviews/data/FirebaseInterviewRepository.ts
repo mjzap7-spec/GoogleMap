@@ -24,8 +24,10 @@ import { queueChatMessage } from '../../chat/data/FirebaseChatRepository';
 import { ServerClock } from '../../contacts/data/ServerClock';
 import {
   interviewInvitation,
+  callMessagePrefix,
   terminalCall,
   type InterviewCall,
+  type CallHistory,
   type InterviewRepository,
   type InterviewTarget,
   type InterviewMode,
@@ -155,6 +157,8 @@ export class FirebaseInterviewRepository implements InterviewRepository {
         ? { requestId: target.contextId, peerId: target.id }
         : { groupId: target.contextId, memberId: target.id },
       interviewInvitation[mode],
+      undefined,
+      callMessagePrefix + ref.id,
     );
     await batch.commit();
     return {
@@ -163,6 +167,29 @@ export class FirebaseInterviewRepository implements InterviewRepository {
       expiresAt: clock.localDeadline(expiresAt),
       validUntil: clock.localDeadline(validUntil),
     };
+  }
+  history(uid: string, id: string, next: (history: CallHistory | undefined) => void) {
+    return onSnapshot(
+      doc(this.db(uid), 'interviewCalls', id),
+      (snapshot) => {
+        const call = snapshot.data();
+        if (!call) return next(undefined);
+        const { status, answer, connectedAt, endedAt } = call;
+        next({
+          status,
+          answered: !!answer,
+          durationSeconds:
+            connectedAt instanceof Timestamp && endedAt instanceof Timestamp
+              ? Math.max(0, Math.floor((endedAt.toMillis() - connectedAt.toMillis()) / 1000))
+              : undefined,
+        });
+      },
+      () => next(undefined),
+    );
+  }
+  async connected(uid: string, id: string) {
+    const ref = doc(this.db(uid), 'interviewCalls', id);
+    await updateDoc(ref, { connectedAt: serverTimestamp() });
   }
   watch(
     uid: string,

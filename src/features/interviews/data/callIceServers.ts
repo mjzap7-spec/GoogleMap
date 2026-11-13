@@ -3,25 +3,41 @@ import type { IceServer } from './PeerCallMedia';
 
 let cachedRelay:
   { uid: string; endpoint: string; expiresAt: number; servers: IceServer[] } | undefined;
+let pendingRelay: { uid: string; endpoint: string; request: Promise<IceServer[]> } | undefined;
 
 /** An optional trusted backend returns short-lived TURN credentials; no relay secret belongs in the app. */
 export async function callIceServers(): Promise<IceServer[]> {
   const endpoint = process.env.EXPO_PUBLIC_CALL_ICE_ENDPOINT;
   if (!endpoint) return [{ urls: 'stun:stun.l.google.com:19302' }];
   const user = getFirebaseAuth().currentUser;
+  if (!user) throw Error('Could not load the call relay configuration.');
   if (
-    user &&
     cachedRelay?.uid === user.uid &&
     cachedRelay.endpoint === endpoint &&
     cachedRelay.expiresAt > Date.now()
   )
     return cachedRelay.servers;
+  if (pendingRelay?.uid === user.uid && pendingRelay.endpoint === endpoint)
+    return pendingRelay.request;
+  const request = fetchRelay(endpoint, user);
+  pendingRelay = { uid: user.uid, endpoint, request };
+  try {
+    return await request;
+  } finally {
+    if (pendingRelay?.request === request) pendingRelay = undefined;
+  }
+}
+
+async function fetchRelay(
+  endpoint: string,
+  user: NonNullable<ReturnType<typeof getFirebaseAuth>['currentUser']>,
+): Promise<IceServer[]> {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 10000);
   try {
     const url = new URL(endpoint);
     if (url.protocol !== 'https:' || url.username || url.password) throw Error();
-    const token = await user?.getIdToken();
+    const token = await user.getIdToken();
     if (!token) throw Error();
     const options: RequestInit = {
       signal: abort.signal,
@@ -53,7 +69,7 @@ export async function callIceServers(): Promise<IceServer[]> {
       })
     )
       throw Error();
-    if (user)
+    if (getFirebaseAuth().currentUser === user)
       cachedRelay = {
         uid: user.uid,
         endpoint,

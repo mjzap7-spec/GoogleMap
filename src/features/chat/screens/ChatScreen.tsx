@@ -1,25 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Keyboard, useWindowDimensions } from 'react-native';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useSession } from '../../auth/bindings/useSession';
-import { useContactsSelection } from '../../contacts/bindings/ContactsProvider';
-import { selectContactDirectory } from '../../contacts/viewmodels/contactSelectors';
-import { shallowEqual } from '../../../shared/mvvm/shallowEqual';
-import { useSharingGroups } from '../../contacts/bindings/SharingProvider';
 import { resolveConversation, memberKey, type ChatSelection } from '../models/conversations';
-import { createConversationProjection } from '../models/conversationProjection';
-import { useGroupChatActivity } from '../bindings/useGroupChatActivity';
 import { useConversation } from '../bindings/useConversation';
 import { useConversationRead } from '../bindings/useConversationRead';
-import { useUnreadChats } from '../bindings/UnreadChatsProvider';
+import { useChatDirectory } from '../bindings/useChatDirectory';
+import { useUnreadChatsModel } from '../bindings/UnreadChatsProvider';
 import { ChatView } from '../views/ChatView';
 import { MessagePane } from '../views/MessagePane';
 import type { ChatPeer } from '../models/chat';
-import { personConversation } from '../models/personConversation';
 import { useInterviewModel } from '../../interviews/bindings/InterviewsProvider';
 import { interviewTarget } from '../../interviews/models/interview';
 
-function Thread({
+const Thread = memo(function Thread({
   uid,
   peer,
   focused,
@@ -33,10 +27,12 @@ function Thread({
   optionsRequest: number;
 }) {
   const { state, commands } = useConversation(uid, peer, focused);
-  const { model } = useUnreadChats();
+  const model = useUnreadChatsModel();
+  const { watchHistory } = useInterviewModel();
   const onRead = useConversationRead(peer, focused, model, commands.markVisibleRead);
   return (
     <MessagePane
+      watchCall={watchHistory}
       uid={uid}
       peerName={peerName}
       optionsRequest={optionsRequest}
@@ -46,7 +42,7 @@ function Thread({
       onRead={onRead}
     />
   );
-}
+});
 export function ChatScreen() {
   const { id, group, member, person } = useLocalSearchParams<{
     id?: string;
@@ -84,8 +80,6 @@ function ChatWorkspace({
   const {
     state: { user },
   } = useSession();
-  const { state: contacts, commands } = useContactsSelection(selectContactDirectory, shallowEqual);
-  const { state: sharing, model: groups } = useSharingGroups();
   const uid = user?.id ?? '';
   const interviews = useInterviewModel();
   const focused = useIsFocused();
@@ -93,68 +87,18 @@ function ChatWorkspace({
   const [listOpen, setListOpen] = useState(!initialKey && !initialPerson);
   const [pendingPerson, setPendingPerson] = useState(initialPerson);
   const [optionsRequest, setOptionsRequest] = useState(0);
-  const inbox = useConversation(uid, undefined, focused);
-  const activity = useGroupChatActivity(uid, sharing.groups, focused);
-  const { state: unread, model: unreadModel } = useUnreadChats();
-  const projectConversations = useMemo(() => createConversationProjection(), []);
-  const rows = useMemo(
-    () =>
-      projectConversations(
-        uid,
-        contacts.contacts,
-        sharing.groups,
-        inbox.state.previews,
-        activity.entries,
-        unread.counts,
-      ),
-    [
-      projectConversations,
-      uid,
-      contacts.contacts,
-      sharing.groups,
-      inbox.state.previews,
-      activity.entries,
-      unread.counts,
-    ],
-  );
   const [choice, setChoice] = useState<ChatSelection | undefined>(
     initialKey ? { key: initialKey, groupId: initialGroup } : undefined,
   );
-  const personEntry = useMemo(
-    () =>
-      pendingPerson && !contacts.loading && sharing.membershipsLoaded && !inbox.state.loading
-        ? personConversation(
-            uid,
-            pendingPerson,
-            contacts.contacts,
-            sharing.groups,
-            inbox.state.previews,
-            activity.entries,
-            unread.counts,
-          )
-        : undefined,
-    [
-      pendingPerson,
-      uid,
-      contacts.loading,
-      contacts.contacts,
-      sharing.membershipsLoaded,
-      sharing.groups,
-      inbox.state.loading,
-      inbox.state.previews,
-      activity.entries,
-      unread.counts,
-    ],
-  );
+  const directory = useChatDirectory(uid, focused, pendingPerson);
+  const { rows, personEntry } = directory;
   // Resolve once before mounting the transcript; live read receipts must not switch it later.
-  if (!contacts.loadError && !inbox.state.error) {
-    if (personEntry?.status === 'ready') {
-      setChoice(personEntry.selection);
-      setPendingPerson(undefined);
-    } else if (personEntry?.status === 'unavailable') {
-      setPendingPerson(undefined);
-      setListOpen(true);
-    }
+  if (personEntry?.status === 'ready') {
+    setChoice(personEntry.selection);
+    setPendingPerson(undefined);
+  } else if (personEntry?.status === 'unavailable') {
+    setPendingPerson(undefined);
+    setListOpen(true);
   }
   const selected = resolveConversation(rows, choice);
   const openingPerson = !!pendingPerson;
@@ -224,7 +168,7 @@ function ChatWorkspace({
       }}
       selected={selected?.row}
       onSelect={select}
-      expandedGroup={sharing.groups.find((g) => g.id === selected?.groupId)}
+      expandedGroup={directory.groups.find((g) => g.id === selected?.groupId)}
       transcript={
         peer &&
         choice && (
@@ -238,22 +182,9 @@ function ChatWorkspace({
           />
         )
       }
-      loading={contacts.loading || inbox.state.loading}
-      error={
-        contacts.loadError ||
-        inbox.state.error ||
-        sharing.error ||
-        (unread.failed || [...activity.entries.values()].some((entry) => entry.failed)
-          ? 'Could not load chats. Please retry.'
-          : '')
-      }
-      onRetry={() => {
-        if (contacts.loadError) commands.retry();
-        if (inbox.state.error) inbox.commands.start();
-        if (sharing.error) groups.start();
-        activity.retry();
-        if (unread.failed) unreadModel.retry();
-      }}
+      loading={directory.loading}
+      error={directory.error}
+      onRetry={directory.retry}
       onBack={() =>
         compact && !showingList
           ? showList()

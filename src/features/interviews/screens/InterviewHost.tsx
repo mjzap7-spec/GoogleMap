@@ -6,7 +6,7 @@ import { InterviewView } from '../views/InterviewView';
 export function InterviewHost() {
   const model = useInterviewModel();
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
-  if (state.phase === 'idle') return null;
+  if (state.phase === 'idle' || (state.phase === 'ended' && !state.error)) return null;
   return (
     <>
       {(state.phase === 'incoming' || state.phase === 'outgoing') && (

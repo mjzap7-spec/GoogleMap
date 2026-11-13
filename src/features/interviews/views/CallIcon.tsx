@@ -4,9 +4,11 @@ import { colors } from '../../../shared/theme/colors';
 export function CallIcon({
   kind = 'video',
   color = colors.accent,
+  off = false,
 }: {
   kind?: 'video' | 'voice';
   color?: string;
+  off?: boolean;
 }) {
   return (
     <View accessible={false} style={s.frame}>
@@ -22,6 +24,7 @@ export function CallIcon({
           <View style={[s.stem, { backgroundColor: color }]} />
         </>
       )}
+      {off && <View style={[s.slash, { backgroundColor: color }]} />}
     </View>
   );
 }
@@ -55,6 +58,15 @@ const s = StyleSheet.create({
   handsetLeft: { left: 0 },
   handsetRight: { right: 0 },
   frame: { width: 24, height: 24 },
+  slash: {
+    position: 'absolute',
+    top: 11,
+    left: -2,
+    width: 28,
+    height: 2,
+    borderRadius: 1,
+    transform: [{ rotate: '45deg' }],
+  },
   camera: {
     position: 'absolute',
     left: 0,

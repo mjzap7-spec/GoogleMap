@@ -142,6 +142,7 @@ export const interviewCatalog: Record<string, readonly string[]> = {
     'カメラを切り替え',
   ],
   'No answer': ['Sin respuesta', 'Pas de réponse', 'Keine Antwort', '无人接听', '応答なし'],
+  Answered: ['Contestada', 'Appel accepté', 'Angenommen', '已接听', '応答済み'],
   'Interview declined': [
     'Entrevista rechazada',
     'Entretien refusé',

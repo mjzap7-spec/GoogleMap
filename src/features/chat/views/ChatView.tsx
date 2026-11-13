@@ -26,6 +26,7 @@ import { useLayoutMotion } from '../../../shared/motion/useLayoutMotion';
 import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
 import { ChatIcon, EditIcon } from '../../../shared/ui/ChatIcon';
 import { InlineRetry } from '../../../shared/ui/InlineRetry';
+import { UnreadBadge } from '../../../shared/ui/UnreadBadge';
 import type { PrivateGroup } from '../../contacts/models/sharing';
 import { ConversationRow } from './ConversationRow';
 import { useConversationMotion } from './chatMotion';
@@ -76,6 +77,17 @@ export function ChatView({
   );
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ConversationFilter>('all');
+  const unreadThreads = useMemo(
+    () =>
+      rows.reduce(
+        (count, row) =>
+          count +
+          Number((row.unread ?? 0) > 0) +
+          (row.members?.filter((member) => (member.unread ?? 0) > 0).length ?? 0),
+        0,
+      ),
+    [rows],
+  );
   // Folding a roster is local UI state, independent of the open conversation.
   const [collapsedGroupId, setCollapsedGroupId] = useState<string>();
   const expandedGroupId = expandedGroup?.id === collapsedGroupId ? undefined : expandedGroup?.id;
@@ -208,7 +220,7 @@ export function ChatView({
               <EditIcon />
             </Pressable>
           </View>
-          <View style={s.filters}>
+          <View style={s.filters} accessibilityRole="tablist">
             {(
               [
                 ['all', 'All chats'],
@@ -219,6 +231,9 @@ export function ChatView({
               <Pressable
                 key={value}
                 accessibilityRole="tab"
+                accessibilityLabel={
+                  value === 'unread' && unreadThreads ? `${t(label)} (${unreadThreads})` : t(label)
+                }
                 accessibilityState={{ selected: filter === value }}
                 onPress={() => setFilter(value)}
                 style={({ pressed }) => [
@@ -228,6 +243,7 @@ export function ChatView({
                 ]}
               >
                 <Text style={[s.filterLabel, filter === value && s.filterActive]}>{t(label)}</Text>
+                {value === 'unread' && <UnreadBadge count={unreadThreads} inline />}
               </Pressable>
             ))}
           </View>
@@ -272,7 +288,23 @@ export function ChatView({
                         : 'Choose a conversation',
                   )}
                 </Text>
-                {!search && (
+                {search ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setSearch('')}
+                    style={s.link}
+                  >
+                    <Text style={s.accent}>{t('Clear search')}</Text>
+                  </Pressable>
+                ) : filter === 'unread' ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setFilter('all')}
+                    style={s.link}
+                  >
+                    <Text style={s.accent}>{t('All chats')}</Text>
+                  </Pressable>
+                ) : (
                   <Pressable accessibilityRole="button" onPress={onContacts} style={s.link}>
                     <Text style={s.accent}>{t('Contacts')}</Text>
                   </Pressable>
@@ -366,15 +398,30 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingTop: 12, paddingBottom: 14 },
+  filters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    padding: 4,
+    marginTop: 12,
+    marginBottom: 14,
+    borderRadius: 16,
+    backgroundColor: colors.input,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   filter: {
-    minHeight: 40,
+    flexGrow: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
     justifyContent: 'center',
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 13,
   },
-  filterSelected: { backgroundColor: '#BCB5FF1B' },
+  filterSelected: { backgroundColor: '#BCB5FF24' },
   filterLabel: { color: colors.muted, fontSize: 13, fontWeight: '600' },
   filterActive: { color: colors.accent },
   panes: {

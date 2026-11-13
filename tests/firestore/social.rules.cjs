@@ -122,6 +122,9 @@ test('interview calls: only callee can accept once; identities and offers cannot
   await assertFails(updateDoc(callee, { ...answer, fromId: 'eve' }));
   await assertFails(updateDoc(callee, { ...answer, offer: { type: 'offer', sdp: 'changed' } }));
   await assertSucceeds(updateDoc(callee, answer));
+  await assertFails(updateDoc(caller, { connectedAt: Timestamp.fromMillis(0) }));
+  await assertSucceeds(updateDoc(caller, { connectedAt: serverTimestamp() }));
+  await assertFails(updateDoc(callee, { connectedAt: serverTimestamp() }));
   await assertFails(
     updateDoc(callee, { ...answer, answer: { type: 'answer', sdp: 'replacement' } }),
   );

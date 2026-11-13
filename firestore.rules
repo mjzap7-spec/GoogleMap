@@ -388,7 +388,13 @@ service cloud.firestore {
    allow get: if participant(resource.data);
    allow list: if own(resource.data.toId) && request.query.limit<=10;
    allow create: if signedIn() && validCreate(request.resource.data);
-   allow update: if participant(resource.data) && (validAccept() || validEnd());
+   function validConnected() {
+    return resource.data.status == 'accepted' && resource.data.validUntil > request.time
+     && !('connectedAt' in resource.data)
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['connectedAt'])
+     && request.resource.data.connectedAt == request.time;
+   }
+   allow update: if participant(resource.data) && (validAccept() || validEnd() || validConnected());
    allow delete: if false;
    match /candidates/{candidateId} {
     function call() { return get(/databases/$(database)/documents/interviewCalls/$(callId)).data; }

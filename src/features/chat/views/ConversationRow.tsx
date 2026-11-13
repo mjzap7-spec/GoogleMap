@@ -5,6 +5,8 @@ import { colors } from '../../../shared/theme/colors';
 import { Avatar } from '../../../shared/ui/Avatar';
 import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
 import { UnreadBadge, chatButtonLabel } from '../../../shared/ui/UnreadBadge';
+import { interviewInvitation } from '../../interviews/models/interview';
+import { CallIcon } from '../../interviews/views/CallIcon';
 import { selectConversation, type Conversation, type ChatSelection } from '../models/conversations';
 import { useChatPress, useChatProgress } from './chatMotion';
 
@@ -31,11 +33,27 @@ export const ConversationRow = memo(function ConversationRow({
   const member = 'memberId' in item.target;
   const room = 'groupId' in item.target && !member;
   const name = item.name || t('Group member');
+  const preview = item.preview?.text;
+  const callMode =
+    preview === interviewInvitation.voice
+      ? 'voice'
+      : preview === interviewInvitation.video
+        ? 'video'
+        : undefined;
   const selection = useChatProgress(active ? 1 : 0);
   const disclosure = useChatProgress(expanded ? 1 : 0);
   const press = useChatPress();
   return (
-    <Animated.View style={[s.container, s.surface, member && !compact && s.member, press.style]}>
+    <Animated.View
+      style={[
+        s.container,
+        s.surface,
+        room && !compact && s.groupSurface,
+        member && !compact && s.member,
+        !!unread && !compact && s.unreadSurface,
+        press.style,
+      ]}
+    >
       <Animated.View
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, s.selected, { opacity: selection }]}
@@ -104,12 +122,28 @@ export const ConversationRow = memo(function ConversationRow({
           </View>
           {!compact && (
             <View style={s.headline}>
-              <Text numberOfLines={1} style={[s.preview, s.growing]}>
-                {item.preview?.text === ''
-                  ? t('Message deleted')
-                  : (item.preview?.text ??
-                    t(room ? 'Group chat' : member ? 'Group member' : 'Contact'))}
-              </Text>
+              <View style={s.previewLine}>
+                {callMode && (
+                  <View style={s.previewIcon}>
+                    <CallIcon kind={callMode} />
+                  </View>
+                )}
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    s.preview,
+                    s.growing,
+                    callMode && s.callPreview,
+                    !!unread && s.unreadPreview,
+                  ]}
+                >
+                  {callMode
+                    ? t(callMode === 'voice' ? 'Voice call' : 'Video call')
+                    : preview === ''
+                      ? t('Message deleted')
+                      : (preview ?? t(room ? 'Group chat' : member ? 'Group member' : 'Contact'))}
+                </Text>
+              </View>
               <UnreadBadge count={unread} inline />
             </View>
           )}
@@ -127,7 +161,11 @@ export const ConversationRow = memo(function ConversationRow({
               groupId: 'groupId' in item.target ? item.target.groupId : undefined,
             });
           }}
-          style={s.toggle}
+          style={({ pressed }) => [
+            s.toggle,
+            expanded && s.toggleExpanded,
+            pressed && s.togglePressed,
+          ]}
         >
           <Animated.View
             style={[
@@ -161,6 +199,8 @@ const s = StyleSheet.create({
     borderColor: '#272A35',
   },
   surface: { backgroundColor: colors.input },
+  groupSurface: { backgroundColor: '#1D1E2A' },
+  unreadSurface: { borderColor: '#8277BD' },
   row: { alignItems: 'center', gap: 7, padding: 8, borderRadius: 16 },
   compact: { paddingVertical: 11, minHeight: 84 },
   wide: { flex: 1, minWidth: 0, flexDirection: 'row', minHeight: 78, gap: 12, padding: 12 },
@@ -175,7 +215,7 @@ const s = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 16,
-    backgroundColor: '#BCB5FF16',
+    backgroundColor: '#BCB5FF23',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -192,8 +232,8 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   chevron: {
-    width: 5,
-    height: 5,
+    width: 7,
+    height: 7,
     borderRightWidth: 1.5,
     borderBottomWidth: 1.5,
     borderColor: colors.accent,
@@ -201,12 +241,22 @@ const s = StyleSheet.create({
   identity: { flex: 1, minWidth: 0, gap: 5 },
   headline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   growing: { flex: 1, minWidth: 0 },
-  name: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: '600' },
+  name: { color: colors.text, fontSize: 16, lineHeight: 21, fontWeight: '600' },
   small: { fontSize: 11, lineHeight: 14, textAlign: 'center' },
   selectedName: { color: '#E7E3FF' },
   unreadName: { fontWeight: '700' },
   unreadTime: { color: colors.accent },
   preview: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  previewLine: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  previewIcon: {
+    width: 16,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ scale: 0.65 }],
+  },
+  callPreview: { color: '#C9C2FF' },
+  unreadPreview: { color: colors.text, fontWeight: '600' },
   time: { color: colors.muted, fontSize: 11, fontVariant: ['tabular-nums'] },
   toggle: {
     width: 44,
@@ -217,4 +267,6 @@ const s = StyleSheet.create({
     marginRight: 6,
     backgroundColor: '#FFFFFF04',
   },
+  toggleExpanded: { backgroundColor: '#BCB5FF24' },
+  togglePressed: { backgroundColor: '#BCB5FF38' },
 });

@@ -60,8 +60,10 @@ export function queueChatMessage(
   peer: ChatPeer,
   text: string,
   replyTo?: string,
+  messageId?: string,
 ) {
-  const ref = doc(transcript(db, uid, peer));
+  const messages = transcript(db, uid, peer);
+  const ref = messageId ? doc(messages, messageId) : doc(messages);
   if ('groupId' in peer) {
     batch.set(ref, {
       fromId: uid,

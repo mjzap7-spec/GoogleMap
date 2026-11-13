@@ -34,14 +34,23 @@ import { ChatHistorySheet } from './ChatHistorySheet';
 import { MessageSelectionBar } from './MessageSelectionBar';
 import { useLayoutMotion } from '../../../shared/motion/useLayoutMotion';
 import { SelectionCheck } from './SelectionCheck';
-import { interviewInvitation } from '../../interviews/models/interview';
+import {
+  callMessagePrefix,
+  interviewInvitation,
+  type CallHistory,
+} from '../../interviews/models/interview';
 import { CallIcon } from '../../interviews/views/CallIcon';
 import { AnimatedEmoji } from './AnimatedEmoji';
 import { messageEmoji } from '../models/messageEmoji';
+type WatchCall = (
+  id: string,
+  next: (history: CallHistory | undefined) => void,
+) => (() => void) | undefined;
 // Commit reads as soon as a message is on screen, including partially visible long rows.
 const readVisibility = { viewAreaCoveragePercentThreshold: 1 };
 const scrollAnchor = { minIndexForVisible: 0, autoscrollToTopThreshold: 36 };
 export function MessagePane({
+  watchCall,
   uid,
   state,
   commands,
@@ -50,6 +59,7 @@ export function MessagePane({
   peerName,
   optionsRequest = 0,
 }: {
+  watchCall?: WatchCall;
   uid: string;
   groupRoom: boolean;
   onRead?: (through: ReadTime) => void;
@@ -212,6 +222,7 @@ export function MessagePane({
         </View>
       ) : (
         <MessageTimeline
+          watchCall={watchCall}
           uid={uid}
           messages={state.messages}
           readThrough={state.readThrough}
@@ -274,6 +285,7 @@ export function MessagePane({
   );
 }
 const MessageTimeline = memo(function MessageTimeline({
+  watchCall,
   uid,
   messages,
   readThrough,
@@ -288,6 +300,7 @@ const MessageTimeline = memo(function MessageTimeline({
   selectedIds,
   onToggle,
 }: {
+  watchCall?: WatchCall;
   uid: string;
   messages: ReturnType<ChatViewModel['getSnapshot']>['messages'];
   readThrough?: ReadTime;
@@ -369,6 +382,7 @@ const MessageTimeline = memo(function MessageTimeline({
               <Text style={s.date}>{date.format(item.time)}</Text>
             )}
             <MessageBubble
+              watchCall={watchCall}
               id={item.id}
               onActions={actionsDisabled ? undefined : onActions}
               reply={item.reply}
@@ -395,6 +409,7 @@ const MessageTimeline = memo(function MessageTimeline({
 });
 
 const MessageBubble = memo(function MessageBubble({
+  watchCall,
   mine,
   newest,
   joinedAbove,
@@ -413,6 +428,7 @@ const MessageBubble = memo(function MessageBubble({
   selected,
   onToggle,
 }: {
+  watchCall?: WatchCall;
   mine: boolean;
   newest: boolean;
   joinedAbove: boolean;
@@ -498,6 +514,12 @@ const MessageBubble = memo(function MessageBubble({
                   <Text style={s.invitationTitle}>
                     {t(interview === 'voice' ? 'Voice interview' : 'Video interview')}
                   </Text>
+                  {id.startsWith(callMessagePrefix) && (
+                    <CallOutcome
+                      watchCall={watchCall}
+                      callId={id.slice(callMessagePrefix.length)}
+                    />
+                  )}
                   <View style={s.invitationMeta}>
                     <Text style={s.invitationLabel}>
                       {pending ? stamp : t('Called at {time}', { time: stamp })}
@@ -551,7 +573,40 @@ function MessageSelectionControl({
     </Animated.View>
   );
 }
+function CallOutcome({ callId, watchCall }: { callId: string; watchCall?: WatchCall }) {
+  const { t } = useTranslation();
+  const [history, setHistory] = useState<CallHistory>();
+  useEffect(() => watchCall?.(callId, setHistory), [callId, watchCall]);
+  if (!history || history.status === 'ringing') return null;
+  const declined = history.status === 'declined';
+  const label = declined
+    ? t('Interview declined')
+    : history.answered
+      ? t('Answered')
+      : t('No answer');
+  const duration = history.durationSeconds;
+  const elapsed =
+    duration === undefined
+      ? ''
+      : ` · ${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')}`;
+  return (
+    <View style={s.invitationMeta}>
+      <Text
+        accessible={false}
+        style={[s.outcomeIcon, { color: declined || !history.answered ? '#FF9AA7' : '#78DDB0' }]}
+      >
+        {declined ? '×' : history.answered ? '✓' : '↙'}
+      </Text>
+      <Text style={s.invitationLabel}>
+        {label}
+        {elapsed}
+      </Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  outcomeIcon: { fontSize: 17, fontWeight: '700' },
   pane: { flex: 1, backgroundColor: '#12141B' },
   muted: { color: colors.muted, textAlign: 'center' },
   empty: { flex: 1, padding: 20, gap: 6, alignItems: 'center', justifyContent: 'center' },

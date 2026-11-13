@@ -153,24 +153,26 @@ export function InterviewView({
             </View>
             <View style={[s.identity, remoteVideo && s.videoIdentity]}>
               {!remoteVideo && (
-                <View style={s.avatarRing}>
-                  <Avatar
-                    uri={state.target?.avatarUrl}
-                    name={state.target?.name ?? ''}
-                    size={104}
-                  />
+                <View style={s.callPortrait}>
+                  <View style={[s.avatarRing, s.callAvatarRing]}>
+                    <Avatar
+                      uri={state.target?.avatarUrl}
+                      name={state.target?.name ?? ''}
+                      size={104}
+                    />
+                  </View>
                 </View>
               )}
               <Text numberOfLines={2} style={[s.name, remoteVideo && s.videoName]}>
                 {state.target?.name}
               </Text>
               {state.phase !== 'connected' && (
-                <Text
-                  accessibilityLiveRegion="polite"
-                  style={[s.status, remoteVideo && s.videoStatus]}
-                >
-                  {t(status)}
-                </Text>
+                <View style={[s.statusPill, remoteVideo && s.videoStatus]}>
+                  <View style={[s.statusDot, incoming && s.incomingDot]} />
+                  <Text accessibilityLiveRegion="polite" style={s.status}>
+                    {t(status)}
+                  </Text>
+                </View>
               )}
               {inCall && <CallClock visible={state.phase === 'connected'} overlay={remoteVideo} />}
             </View>
@@ -186,27 +188,29 @@ export function InterviewView({
                   <CallAction label={t('Answer')} onPress={() => void commands.accept()} answer />
                 </View>
               )}
-              {mediaActive && (
+              {active && (
                 <View style={s.toggles}>
                   <Control
                     label={t(state.muted ? 'Unmute' : 'Mute')}
                     selected={state.muted}
+                    disabled={!mediaActive}
                     onPress={commands.toggleMute}
                   >
-                    <CallIcon kind="voice" />
+                    <CallIcon kind="voice" off={state.muted} />
                   </Control>
                   {state.mode === 'video' && (
                     <>
                       <Control
                         label={t(state.cameraOn ? 'Turn camera off' : 'Turn camera on')}
                         selected={!state.cameraOn}
+                        disabled={!mediaActive}
                         onPress={commands.toggleCamera}
                       >
-                        <CallIcon />
+                        <CallIcon off={!state.cameraOn} />
                       </Control>
                       <Control
                         label={t('Switch camera')}
-                        disabled={!state.cameraOn}
+                        disabled={!mediaActive || !state.cameraOn}
                         onPress={commands.switchCamera}
                       >
                         <Text style={s.switchIcon}>↻</Text>
@@ -215,7 +219,6 @@ export function InterviewView({
                   )}
                 </View>
               )}
-              {active && !mediaActive && <View style={s.controlsPlaceholder} />}
               {active && (
                 <View style={s.callActions}>
                   <CallAction label={t('End call')} onPress={commands.hangUp} />
@@ -311,6 +314,15 @@ const s = StyleSheet.create({
   title: { color: colors.text, fontSize: 15, fontWeight: '600' },
   identity: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   avatarRing: { padding: 6, borderRadius: 60, borderWidth: 1, borderColor: colors.border },
+  callPortrait: {
+    padding: 9,
+    borderRadius: 80,
+    backgroundColor: '#BCB5FF0D',
+    borderWidth: 1,
+    borderColor: '#BCB5FF20',
+    marginBottom: 4,
+  },
+  callAvatarRing: { borderColor: '#BCB5FF50' },
   videoIdentity: {
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
@@ -340,9 +352,20 @@ const s = StyleSheet.create({
     lineHeight: 22,
     maxWidth: 320,
   },
-  videoStatus: { backgroundColor: '#101116D0', padding: 8, borderRadius: 12 },
+  statusPill: {
+    maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+    backgroundColor: '#20222D',
+  },
+  statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent },
+  incomingDot: { backgroundColor: '#69D6A3' },
+  videoStatus: { backgroundColor: '#101116E8', padding: 8, borderRadius: 12 },
   clock: { color: colors.text, fontVariant: ['tabular-nums'] },
-  controlsPlaceholder: { height: 86 },
   local: {
     position: 'absolute',
     right: 20,
@@ -355,7 +378,13 @@ const s = StyleSheet.create({
     borderColor: colors.border,
   },
   controls: { gap: 12, width: '100%', maxWidth: 480, alignSelf: 'center' },
-  videoControls: { backgroundColor: '#101116D9', borderRadius: 28, paddingVertical: 12 },
+  videoControls: {
+    backgroundColor: '#101116E8',
+    borderRadius: 28,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#FFFFFF24',
+  },
   chooserScroll: { flex: 1 },
   chooserContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: 8 },
   chooserCard: {
@@ -418,19 +447,19 @@ const s = StyleSheet.create({
     gap: 5,
   },
   controlIcon: {
-    width: 52,
-    height: 52,
+    width: 56,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 26,
+    borderRadius: 28,
     backgroundColor: '#20222DF2',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  selected: { backgroundColor: '#534862' },
+  selected: { backgroundColor: '#403651', borderColor: colors.accent },
   controlLabel: {
     color: colors.text,
-    fontSize: 11,
+    fontSize: 12,
     textAlign: 'center',
     textShadowColor: '#000',
     textShadowRadius: 6,

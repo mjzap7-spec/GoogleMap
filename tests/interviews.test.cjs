@@ -137,7 +137,7 @@ test('choosing or declining does not capture media; dismissed invitation does no
   h.incoming([invitation()]);
   assert.equal(h.vm.getSnapshot().phase, 'incoming');
   h.vm.decline();
-  h.vm.dismiss();
+  assert.equal(h.vm.getSnapshot().phase, 'idle');
   h.incoming([invitation()]);
   assert.equal(h.vm.getSnapshot().phase, 'idle');
   assert.equal(h.opened, 0);
@@ -162,12 +162,23 @@ test('caller applies answer once, exchanges candidates, controls media, and free
     status: 'accepted',
     answer: { type: 'answer', sdp: 'answer' },
   };
+  let finishAnswer;
+  const applyAnswer = h.session.applyAnswer;
+  h.session.applyAnswer = async () => {
+    await applyAnswer();
+    await new Promise((resolve) => {
+      finishAnswer = resolve;
+    });
+  };
   h.changed(call);
   h.changed(call);
   await tick();
   assert.equal(h.answerApplied, 1);
   assert.equal(h.other, 'bob');
   h.candidate(candidate);
+  await tick();
+  assert.equal(h.remoteCandidates.length, 0);
+  finishAnswer();
   await tick();
   assert.equal(h.remoteCandidates.length, 1);
   h.events.connection('connected');
