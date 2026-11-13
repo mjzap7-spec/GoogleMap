@@ -1,4 +1,5 @@
 function reply(status, body, headers = {}) {
+  if (status >= 500) console.warn('TURN credential request failed', status, body.error);
   return Response.json(body, {
     status,
     headers: { 'Cache-Control': 'no-store', ...headers },
@@ -10,7 +11,7 @@ function postJson(url, body, headers = {}) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
-    redirect: 'error',
+    redirect: 'manual',
     signal: AbortSignal.timeout(4000),
   });
 }
@@ -20,9 +21,10 @@ async function getIceServers(env, useMetered) {
     const url = new URL(`https://${env.METERED_APP_NAME}.metered.live/api/v1/turn/credentials`);
     url.searchParams.set('apiKey', env.METERED_TURN_API_KEY);
     const response = await fetch(url, {
-      redirect: 'error',
+      redirect: 'manual',
       signal: AbortSignal.timeout(4000),
     });
+    if (!response.ok) console.warn('Metered credential API status', response.status);
     return response.ok ? await response.json() : null;
   }
 
@@ -107,6 +109,11 @@ export default {
       ) {
         return reply(502, { error: 'Relay credential service returned no TURN server' });
       }
+      console.info(
+        'TURN credentials returned',
+        useMetered ? 'Metered' : 'Cloudflare',
+        servers.length,
+      );
       return reply(200, { iceServers: servers });
     } catch {
       return reply(502, { error: 'Relay credentials unavailable' });

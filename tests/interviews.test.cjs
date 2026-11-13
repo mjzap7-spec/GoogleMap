@@ -102,6 +102,22 @@ function harness(t) {
   t.after(() => h.vm.stop());
   return h;
 }
+test('a failed incoming listener recovers and stops retrying in the background', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = harness(t);
+  const first = h.incoming;
+  h.incomingFail();
+  assert.equal(h.vm.getSnapshot().listeningError, true);
+  t.mock.timers.tick(5000);
+  assert.notEqual(h.incoming, first);
+  assert.equal(h.vm.getSnapshot().listeningError, false);
+  const recovered = h.incoming;
+  h.incomingFail();
+  h.vm.setForeground(false);
+  t.mock.timers.tick(5000);
+  assert.equal(h.incoming, recovered);
+});
+
 test('interviews target contacts and individual group members, never whole group rooms', () => {
   assert.deepEqual(interviewTarget({ peerId: 'bob', requestId: 'r' }, 'Bob'), {
     id: 'bob',

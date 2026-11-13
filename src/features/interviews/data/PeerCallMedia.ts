@@ -22,6 +22,7 @@ export interface RtcStream {
 export interface RtcPeer {
   localDescription: CallDescription | null;
   connectionState: string;
+  iceConnectionState?: string;
   addTrack(track: RtcTrack, stream: RtcStream): unknown;
   addEventListener(
     name: string,
@@ -98,9 +99,18 @@ export async function openPeerMedia(
   };
   try {
     local.getTracks().forEach((track) => peer.addTrack(track, local));
+    const diagnostics = process.env.NODE_ENV === 'development';
+    const gathered = new Set<string>();
     peer.addEventListener('icecandidate', (event) => {
       if (closed || !event.candidate) return;
       const data = event.candidate.toJSON();
+      if (diagnostics) {
+        const type = /\btyp (host|srflx|prflx|relay)\b/.exec(data.candidate)?.[1];
+        if (type && !gathered.has(type)) {
+          gathered.add(type);
+          console.info('[Interview] Local ICE candidate type:', type);
+        }
+      }
       // Browser candidates include usernameFragment; keep the signaling schema identical on native/web.
       // Empty candidates signal gathering completion and do not need a Firestore write.
       if (data.candidate)
@@ -117,6 +127,12 @@ export async function openPeerMedia(
       }
     });
     peer.addEventListener('connectionstatechange', () => {
+      if (diagnostics && !closed)
+        console.info(
+          '[Interview] Connection state:',
+          peer.connectionState,
+          peer.iceConnectionState,
+        );
       if (!closed && ['connected', 'disconnected', 'failed'].includes(peer.connectionState))
         events.connection(peer.connectionState as 'connected' | 'disconnected' | 'failed');
     });

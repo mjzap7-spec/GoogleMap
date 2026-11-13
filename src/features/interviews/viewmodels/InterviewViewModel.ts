@@ -71,8 +71,10 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
     if (this.incomingStop || !this.repo || !this.foreground) return;
     this.update({ listeningError: false });
     let stopped = false;
+    let restart: ReturnType<typeof setTimeout> | undefined;
     this.incomingStop = () => {
       stopped = true;
+      clearTimeout(restart);
     };
     const stop = this.repo.incoming(
       this.uid,
@@ -111,11 +113,16 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
         }
       },
       () => {
-        if (!stopped) this.update({ listeningError: true });
+        if (stopped) return;
+        this.update({ listeningError: true });
+        restart ??= setTimeout(() => {
+          if (!stopped) this.retry();
+        }, 5000);
       },
     );
     this.incomingStop = () => {
       stopped = true;
+      clearTimeout(restart);
       stop();
     };
   };

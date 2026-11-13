@@ -178,8 +178,12 @@ export class FirebaseInterviewRepository implements InterviewRepository {
     };
     const callStop = onSnapshot(
       doc(db, 'interviewCalls', id),
+      { includeMetadataChanges: true },
       (snap) => {
         if (stopped) return;
+        // A listener can initially miss the document while Firestore reconnects.
+        // Only a server snapshot can confirm that the call no longer exists.
+        if (!snap.exists() && snap.metadata.fromCache) return;
         const call = this.read(uid, snap);
         next(call);
         if (!call || terminalCall(call.status) || contextStop || stopped) return;
