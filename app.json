@@ -70,7 +70,8 @@
       ],
       "./plugins/withShortAndroidObjectPaths.js",
       "./plugins/withAndroidDevSupport.js",
-      "./plugins/withFirestoreStreaming.js"
+      "./plugins/withFirestoreStreaming.js",
+      "./plugins/withInterviewAudio.js"
     ],
     "experiments": {
       "typedRoutes": true

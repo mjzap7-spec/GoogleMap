@@ -33,7 +33,16 @@ export interface RtcPeer {
   setLocalDescription(description: CallDescription): Promise<void>;
   setRemoteDescription(description: CallDescription): Promise<void>;
   addIceCandidate(candidate: CallCandidate): Promise<void>;
+  getStats?(): Promise<ReadonlyMap<string, AudioStat>>;
   close(): void;
+}
+interface AudioStat {
+  type: string;
+  kind?: string;
+  mediaType?: string;
+  packetsSent?: number;
+  packetsReceived?: number;
+  totalAudioEnergy?: number;
 }
 export interface IceServer {
   urls: string | string[];
@@ -84,6 +93,7 @@ export async function openPeerMedia(
   let closed = false,
     remote: RtcStream | undefined,
     peer: RtcPeer;
+  let audioCheck: ReturnType<typeof setTimeout> | undefined;
   try {
     peer = new runtime.RTCPeerConnection({ iceServers: relay.value });
   } catch (error) {
@@ -93,6 +103,7 @@ export async function openPeerMedia(
   const close = () => {
     if (closed) return;
     closed = true;
+    clearTimeout(audioCheck);
     releaseStream(local);
     if (remote) releaseStream(remote);
     peer.close();
@@ -100,6 +111,23 @@ export async function openPeerMedia(
   try {
     local.getTracks().forEach((track) => peer.addTrack(track, local));
     const diagnostics = process.env.NODE_ENV === 'development';
+    const checkAudio = async () => {
+      try {
+        const stats = await peer.getStats?.();
+        if (closed || !stats) return;
+        const audio = [...stats.values()].filter(
+          (stat) => (stat.kind ?? stat.mediaType) === 'audio',
+        );
+        console.info('[Interview] Audio stats:', {
+          sent: audio.find((stat) => stat.type === 'outbound-rtp')?.packetsSent,
+          received: audio.find((stat) => stat.type === 'inbound-rtp')?.packetsReceived,
+          microphoneEnergy: audio.find((stat) => stat.type === 'media-source')?.totalAudioEnergy,
+          receivedEnergy: audio.find((stat) => stat.type === 'inbound-rtp')?.totalAudioEnergy,
+        });
+      } catch {
+        // Diagnostics must never affect the call.
+      }
+    };
     const gathered = new Set<string>();
     peer.addEventListener('icecandidate', (event) => {
       if (closed || !event.candidate) return;
@@ -127,6 +155,8 @@ export async function openPeerMedia(
       }
     });
     peer.addEventListener('connectionstatechange', () => {
+      if (diagnostics && !closed && peer.connectionState === 'connected' && !audioCheck)
+        audioCheck = setTimeout(() => void checkAudio(), 8000);
       if (diagnostics && !closed)
         console.info(
           '[Interview] Connection state:',
