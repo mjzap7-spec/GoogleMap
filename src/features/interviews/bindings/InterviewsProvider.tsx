@@ -11,6 +11,7 @@ import { useAuthDependencies } from '../../auth/bindings/AuthProvider';
 import type { AuthUser } from '../../auth/models/auth';
 import type { Contact } from '../../contacts/models/contact';
 import { interviewTarget } from '../models/interview';
+import { isRequestingInterviewPermissions } from '../../../shared/platform/interviewPermissions';
 import type { InterviewViewModel } from '../viewmodels/InterviewViewModel';
 
 const Context = createContext<InterviewViewModel | null>(null);
@@ -37,11 +38,22 @@ export function InterviewsProvider({ user, children }: PropsWithChildren<{ user:
     }
     model.setForeground(AppState.currentState !== 'background');
     // Ignore transient iOS "inactive" during the system permission dialog.
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state !== 'inactive') model.setForeground(state === 'active');
+    let permissionCheck: ReturnType<typeof setTimeout> | undefined;
+    const updateForeground = () => {
+      if (AppState.currentState === 'background' && isRequestingInterviewPermissions()) {
+        permissionCheck = setTimeout(updateForeground, 250);
+        return;
+      }
+      if (AppState.currentState !== 'inactive')
+        model.setForeground(AppState.currentState === 'active');
+    };
+    const subscription = AppState.addEventListener('change', () => {
+      clearTimeout(permissionCheck);
+      updateForeground();
     });
     return () => {
       subscription.remove();
+      clearTimeout(permissionCheck);
       model.stop();
     };
   }, [model]);

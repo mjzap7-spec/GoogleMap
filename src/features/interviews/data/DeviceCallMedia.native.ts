@@ -1,3 +1,4 @@
+import { requestInterviewPermissions } from '../../../shared/platform/interviewPermissions';
 import type { CallMedia } from '../models/interview';
 import { openPeerMedia, type RtcRuntime } from './PeerCallMedia';
 import { callIceServers } from './callIceServers';
@@ -12,6 +13,18 @@ export class DeviceCallMedia implements CallMedia {
     } catch {
       throw Error('Rebuild the development app to enable interview calls.');
     }
-    return openPeerMedia(runtime as unknown as RtcRuntime, callIceServers(), mode, events);
+    const native = runtime as unknown as RtcRuntime;
+    const mediaDevices: RtcRuntime['mediaDevices'] = {
+      getUserMedia: async (options) => {
+        await requestInterviewPermissions(mode === 'video');
+        return native.mediaDevices.getUserMedia(options);
+      },
+    };
+    return openPeerMedia(
+      { RTCPeerConnection: native.RTCPeerConnection, mediaDevices },
+      callIceServers(),
+      mode,
+      events,
+    );
   };
 }

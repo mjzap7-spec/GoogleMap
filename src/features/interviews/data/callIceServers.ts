@@ -1,23 +1,39 @@
 import { getFirebaseAuth } from '../../../config/firebase/client';
 import type { IceServer } from './PeerCallMedia';
 
+let cachedRelay:
+  { uid: string; endpoint: string; expiresAt: number; servers: IceServer[] } | undefined;
+
 /** An optional trusted backend returns short-lived TURN credentials; no relay secret belongs in the app. */
 export async function callIceServers(): Promise<IceServer[]> {
   const endpoint = process.env.EXPO_PUBLIC_CALL_ICE_ENDPOINT;
   if (!endpoint) return [{ urls: 'stun:stun.l.google.com:19302' }];
+  const user = getFirebaseAuth().currentUser;
+  if (
+    user &&
+    cachedRelay?.uid === user.uid &&
+    cachedRelay.endpoint === endpoint &&
+    cachedRelay.expiresAt > Date.now()
+  )
+    return cachedRelay.servers;
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 10000);
   try {
     const url = new URL(endpoint);
     if (url.protocol !== 'https:' || url.username || url.password) throw Error();
-    const token = await getFirebaseAuth().currentUser?.getIdToken();
+    const token = await user?.getIdToken();
     if (!token) throw Error();
-    const response = await fetch(url.toString(), {
+    const options: RequestInit = {
       signal: abort.signal,
       redirect: 'error',
       headers: { Authorization: 'Bearer ' + token },
-    });
-    if (!response.ok) throw Error();
+    };
+    let response = await fetch(url.toString(), options).catch(() => undefined);
+    if (!abort.signal.aborted && (!response || response.status >= 500)) {
+      response = await fetch(url.toString(), options);
+    }
+    if (!response) throw Error('Credential endpoint unreachable');
+    if (!response.ok) throw Error(`Credential endpoint returned HTTP ${response.status}`);
     const { iceServers } = await response.json();
     if (
       !Array.isArray(iceServers) ||
@@ -37,8 +53,24 @@ export async function callIceServers(): Promise<IceServer[]> {
       })
     )
       throw Error();
+    if (user)
+      cachedRelay = {
+        uid: user.uid,
+        endpoint,
+        expiresAt: Date.now() + 60_000,
+        servers: iceServers,
+      };
     return iceServers;
-  } catch {
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development')
+      console.info(
+        '[Interview] Relay request failed:',
+        error instanceof Error && /^Credential endpoint returned HTTP \d+$/.test(error.message)
+          ? error.message
+          : error instanceof Error
+            ? error.name
+            : 'UnknownError',
+      );
     throw Error('Could not load the call relay configuration.');
   } finally {
     clearTimeout(timer);
