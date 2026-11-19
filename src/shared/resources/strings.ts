@@ -8,6 +8,7 @@ export type StringTranslations = readonly [
 ];
 
 export const strings: Readonly<Record<string, StringTranslations>> = {
+  Call: ['Llamar', 'Appeler', 'Anrufen', '呼叫', '通話'],
   'Camera off': [
     'Cámara apagada',
     'Caméra désactivée',

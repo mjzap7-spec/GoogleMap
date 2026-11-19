@@ -44,7 +44,7 @@ export const ContactRow = memo(function ContactRow({
         style={({ pressed }) => [s.person, pressed && s.pressed]}
       >
         <View>
-          <Avatar uri={avatarUrl} name={name} size={card ? 44 : 40} />
+          <Avatar uri={avatarUrl} name={name} size={36} />
           <UnreadBadge count={unread} />
         </View>
         <Text style={s.name} numberOfLines={2}>
@@ -85,19 +85,19 @@ const s = StyleSheet.create({
     backgroundColor: colors.input,
     borderWidth: 1,
     borderColor: '#282B36',
-    borderRadius: 18,
+    borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   person: {
     flex: 1,
     minWidth: 0,
-    minHeight: 64,
+    minHeight: 48,
     paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     borderRadius: 12,
   },
   name: { flex: 1, color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: '600' },

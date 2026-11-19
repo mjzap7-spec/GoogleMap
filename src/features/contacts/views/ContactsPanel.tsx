@@ -110,9 +110,14 @@ export const ContactsPanel = memo(function ContactsPanel({
           onPress={commands.openInbox}
           accessibilityLabel={t('Inbox')}
           accessibilityValue={{ text: String(unread) }}
-          style={({ pressed }) => [styles.inbox, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.inbox,
+            fill && styles.labeledInbox,
+            pressed && styles.pressed,
+          ]}
         >
           <InboxIcon />
+          {fill && <Text style={styles.inboxLabel}>{t('Inbox')}</Text>}
           {!!unread && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
@@ -181,6 +186,8 @@ export const ContactsPanel = memo(function ContactsPanel({
   );
 });
 const styles = StyleSheet.create({
+  labeledInbox: { width: 56, minHeight: 52, height: undefined, paddingVertical: 5, gap: 2 },
+  inboxLabel: { color: colors.accent, fontSize: 10, fontWeight: '600' },
   emptyList: { flexGrow: 1, justifyContent: 'center' },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   inbox: {
