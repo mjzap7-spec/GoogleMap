@@ -43,6 +43,7 @@ interface AudioStat {
   packetsSent?: number;
   packetsReceived?: number;
   totalAudioEnergy?: number;
+  audioLevel?: number;
 }
 export interface IceServer {
   urls: string | string[];
@@ -114,7 +115,7 @@ export async function openPeerMedia(
   let closed = false,
     remote: RtcStream | undefined,
     peer: RtcPeer;
-  let audioCheck: ReturnType<typeof setTimeout> | undefined;
+  let audioCheck: ReturnType<typeof setInterval> | undefined;
   try {
     peer = new runtime.RTCPeerConnection({ iceServers: relay });
   } catch (error) {
@@ -124,7 +125,7 @@ export async function openPeerMedia(
   const close = () => {
     if (closed) return;
     closed = true;
-    clearTimeout(audioCheck);
+    clearInterval(audioCheck);
     releaseStream(local);
     if (remote) releaseStream(remote);
     peer.close();
@@ -143,7 +144,10 @@ export async function openPeerMedia(
           sent: audio.find((stat) => stat.type === 'outbound-rtp')?.packetsSent,
           received: audio.find((stat) => stat.type === 'inbound-rtp')?.packetsReceived,
           microphoneEnergy: audio.find((stat) => stat.type === 'media-source')?.totalAudioEnergy,
+          microphoneLevel: audio.find((stat) => stat.type === 'media-source')?.audioLevel,
           receivedEnergy: audio.find((stat) => stat.type === 'inbound-rtp')?.totalAudioEnergy,
+          receivedLevel: audio.find((stat) => stat.type === 'inbound-rtp')?.audioLevel,
+          microphoneEnabled: local.getAudioTracks().map((track) => track.enabled),
         });
       } catch {
         // Diagnostics must never affect the call.
@@ -176,8 +180,10 @@ export async function openPeerMedia(
       }
     });
     peer.addEventListener('connectionstatechange', () => {
-      if (diagnostics && !closed && peer.connectionState === 'connected' && !audioCheck)
-        audioCheck = setTimeout(() => void checkAudio(), 8000);
+      if (diagnostics && !closed && peer.connectionState === 'connected' && !audioCheck) {
+        void checkAudio();
+        audioCheck = setInterval(() => void checkAudio(), 3000);
+      }
       if (diagnostics && !closed)
         console.info(
           '[Interview] Connection state:',

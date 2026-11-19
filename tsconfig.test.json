@@ -14,6 +14,7 @@
     "src/features/interviews/models/**/*.ts",
     "src/features/interviews/viewmodels/**/*.ts",
     "src/features/interviews/data/webrtc/PeerCallMedia.ts",
+    "src/features/interviews/data/device/DeviceCallMedia.native.ts",
     "src/features/chat/data/**/*.ts",
     "src/features/chat/models/**/*.ts",
     "src/features/help/models/**/*.ts",

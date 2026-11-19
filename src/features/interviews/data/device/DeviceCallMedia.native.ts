@@ -1,5 +1,8 @@
 import { requestInterviewPermissions } from '../../../../shared/platform/interviewPermissions';
-import { openInterviewAudio } from '../../../../shared/platform/interviewAudio';
+import {
+  openInterviewAudio,
+  refreshInterviewAudio,
+} from '../../../../shared/platform/interviewAudio';
 import type { CallMedia } from '../../models/interview';
 import { openPeerMedia, type RtcRuntime } from '../webrtc/PeerCallMedia';
 import { callIceServers } from '../webrtc/callIceServers';
@@ -35,12 +38,19 @@ export class DeviceCallMedia implements CallMedia {
         { RTCPeerConnection: native.RTCPeerConnection, mediaDevices },
         callIceServers(),
         mode,
-        events,
+        {
+          ...events,
+          connection(state) {
+            if (state === 'connected' && !failed && !signal?.aborted) void refreshInterviewAudio();
+            events.connection(state);
+          },
+        },
         signal,
       );
       return {
         ...session,
         close() {
+          failed = true;
           try {
             session.close();
           } finally {

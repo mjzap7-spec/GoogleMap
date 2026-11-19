@@ -129,4 +129,14 @@ Use synthetic accounts on the local Firebase emulator for rules tests; do not ca
 
 Automated commands: `npm test`, `npm run lint`, `npm run typecheck`, `npm run test:rules`.
 
+### Connected calls with silent audio on an emulator
+
+An ICE connection and increasing packet counts do not prove that speech is being captured. Compare successive microphone energy and level readings while speaking. Constant energy and a zero level indicate silent input; increasing inbound energy identifies received sound independently of the speaker route.
+
+The Android config plugin `withEmulatorCallAudio` selects the MIC capture source and disables hardware voice effects only on ranchu/goldfish/sdk_gphone emulators. Physical devices keep the standard WebRTC audio device module. Rebuild and reinstall both test apps after changing this plugin: Metro reload cannot apply native audio configuration.
+
+Debug emulator builds emit `InterviewCapture` amplitude metrics every three seconds before WebRTC processing. They log only a peak number, never audio samples or recordings. Check with `adb logcat -s InterviewCapture ReactNativeJS`. A raw peak of zero while speaking means the emulator is not receiving sound from Windows; a healthy raw peak with silent WebRTC levels points to processing rather than permissions or signaling.
+
+On each computer, select the Windows input whose meter moves when speaking, confirm the intended playback device with Windows' Test button, and enable host microphone access in the emulator. Disable simulated headset insertion when testing the built-in microphone and speakers. Enable host input from the console with `adb -s EMULATOR_SERIAL emu avd hostmicon` if needed. Cold-start the emulator after changing host devices if its input remains silent. Verify real speech in both directions before marking a test successful.
+
 References: [React Native WebRTC](https://react-native-webrtc.github.io/handbook/guides/getting-a-call-connected.html), [connection reliability](https://react-native-webrtc.github.io/handbook/guides/improving-call-reliability.html).

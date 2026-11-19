@@ -72,7 +72,8 @@
       "./plugins/withShortAndroidObjectPaths.js",
       "./plugins/withAndroidDevSupport.js",
       "./plugins/withFirestoreStreaming.js",
-      "./plugins/withInterviewAudio.js"
+      "./plugins/withInterviewAudio.js",
+      "./plugins/withEmulatorCallAudio"
     ],
     "experiments": {
       "typedRoutes": true
