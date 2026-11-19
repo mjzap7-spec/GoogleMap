@@ -1,17 +1,7 @@
 import { useTranslation } from '../i18n/LanguageProvider';
-import React, { useEffect, useState, type ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  Animated,
-  Easing,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { useReducedMotion } from '../motion/useReducedMotion';
-import { motion } from '../motion/tokens';
+import React, { useState, type ReactNode } from 'react';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { usePressMotion } from '../motion/usePressMotion';
 import { colors } from '../theme/colors';
 import { ui } from './styles';
 
@@ -34,44 +24,24 @@ export function PrimaryButton({
 }: PrimaryButtonProps) {
   const { t } = useTranslation();
   const isDisabled = busy || disabled;
-  const [scale] = useState(() => new Animated.Value(1));
-  const reducedMotion = useReducedMotion();
-
-  function animatePress(value: number) {
-    scale.stopAnimation();
-    if (reducedMotion !== false) {
-      scale.setValue(1);
-      return;
-    }
-    Animated.timing(scale, {
-      toValue: value,
-      duration: value === 1 ? motion.buttonReleaseDuration : motion.buttonDuration,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: Platform.OS !== 'web',
-      isInteraction: false,
-    }).start();
-  }
-
-  useEffect(() => {
-    if (isDisabled || reducedMotion) {
-      scale.stopAnimation();
-      scale.setValue(1);
-    }
-    return () => scale.stopAnimation();
-  }, [isDisabled, reducedMotion, scale]);
+  const press = usePressMotion(isDisabled);
+  const [focused, setFocused] = useState(false);
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View style={press.style}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t(label)}
         accessibilityState={{ disabled: isDisabled, busy }}
         disabled={isDisabled}
         onPress={onPress}
-        onPressIn={() => animatePress(motion.buttonPressedScale)}
-        onPressOut={() => animatePress(1)}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         style={({ pressed }) => [
           ui.button,
+          focused && s.focused,
           variant !== 'primary' && {
             backgroundColor: colors.input,
             borderWidth: 1,
@@ -109,6 +79,12 @@ export function PrimaryButton({
   );
 }
 const s = StyleSheet.create({
+  focused: {
+    outlineStyle: 'solid',
+    outlineWidth: 2,
+    outlineColor: colors.accent,
+    outlineOffset: 3,
+  },
   content: {
     flexDirection: 'row',
     gap: 10,

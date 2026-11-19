@@ -1,6 +1,7 @@
+import { usePressMotion } from '../motion/usePressMotion';
 import { useTranslation } from '../i18n/LanguageProvider';
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet } from 'react-native';
 import { colors } from '../theme/colors';
 
 export function BackButton({
@@ -11,6 +12,7 @@ export function BackButton({
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
+  const press = usePressMotion(disabled);
 
   return (
     <Pressable
@@ -19,9 +21,13 @@ export function BackButton({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       style={({ pressed }) => [styles.button, { opacity: disabled ? 0.35 : pressed ? 0.65 : 1 }]}
     >
-      <View accessible={false} style={styles.arrow} />
+      <Animated.View accessible={false} style={press.style}>
+        <Animated.View style={styles.arrow} />
+      </Animated.View>
     </Pressable>
   );
 }

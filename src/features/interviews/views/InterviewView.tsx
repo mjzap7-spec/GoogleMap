@@ -1,5 +1,15 @@
+import { useCallPress, useCallStageMotion } from './callMotion';
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { colors } from '../../../shared/theme/colors';
@@ -18,6 +28,10 @@ export function InterviewView({
 }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const landscape = width > height;
+  const compact = height < 740 || landscape;
+  const stageMotion = useCallStageMotion(state.phase);
   const choice = state.phase === 'choose',
     incoming = state.phase === 'incoming',
     ended = state.phase === 'ended';
@@ -48,7 +62,15 @@ export function InterviewView({
         choice || ended ? commands.dismiss() : incoming ? commands.decline() : commands.hangUp()
       }
     >
-      <View style={[s.screen, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}>
+      <View
+        style={[
+          s.screen,
+          {
+            paddingTop: insets.top + (compact ? 8 : 20),
+            paddingBottom: insets.bottom + (compact ? 8 : 24),
+          },
+        ]}
+      >
         {choice || ended ? (
           <ScrollView
             style={s.chooserScroll}
@@ -145,54 +167,106 @@ export function InterviewView({
                 <CallVideo preview={state.remote} />
               </View>
             )}
-            <View style={s.heading}>
+            <View style={[s.heading, compact && s.compactHeading]}>
               <View style={s.headingIcon}>
                 <CallIcon kind={state.mode} />
               </View>
               <Text style={s.title}>{modeLabel}</Text>
             </View>
-            <View style={[s.identity, remoteVideo && s.videoIdentity]}>
-              {!remoteVideo && (
+            <Animated.View
+              style={[
+                s.identity,
+                compact && s.compactIdentity,
+                remoteVideo && s.videoIdentity,
+                stageMotion,
+              ]}
+            >
+              {!remoteVideo && !landscape && (
                 <View style={s.callPortrait}>
                   <View style={[s.avatarRing, s.callAvatarRing]}>
                     <Avatar
                       uri={state.target?.avatarUrl}
                       name={state.target?.name ?? ''}
-                      size={104}
+                      size={compact ? 76 : 104}
                     />
                   </View>
                 </View>
               )}
-              <Text numberOfLines={2} style={[s.name, remoteVideo && s.videoName]}>
+              <Text
+                numberOfLines={2}
+                style={[s.name, compact && s.compactName, remoteVideo && s.videoName]}
+              >
                 {state.target?.name}
               </Text>
-              {state.phase !== 'connected' && (
+              {
                 <View style={[s.statusPill, remoteVideo && s.videoStatus]}>
-                  <View style={[s.statusDot, incoming && s.incomingDot]} />
+                  <View
+                    style={[
+                      s.statusDot,
+                      (incoming || state.phase === 'connected') && s.incomingDot,
+                      state.phase === 'reconnecting' && s.reconnectingDot,
+                    ]}
+                  />
                   <Text accessibilityLiveRegion="polite" style={s.status}>
                     {t(status)}
                   </Text>
                 </View>
-              )}
+              }
               {inCall && state.connectedSince !== undefined && (
                 <CallClock started={state.connectedSince} overlay={remoteVideo} />
               )}
-            </View>
-            {!!state.local && state.mode === 'video' && state.cameraOn && (
-              <View style={[s.local, { top: insets.top + 96 }]}>
-                <CallVideo preview={state.local} local />
+            </Animated.View>
+            {!!state.local && state.mode === 'video' && !landscape && (
+              <View
+                style={[
+                  s.local,
+                  compact && s.compactLocal,
+                  { top: insets.top + (compact ? 68 : 96) },
+                ]}
+              >
+                {state.cameraOn ? (
+                  <CallVideo preview={state.local} local />
+                ) : (
+                  <View style={s.cameraOff}>
+                    <CallIcon off />
+                    <Text style={s.previewLabel}>{t('Camera off')}</Text>
+                  </View>
+                )}
+                {state.cameraOn && <Text style={s.previewBadge}>{t('You')}</Text>}
               </View>
             )}
-            <View style={[s.controls, remoteVideo && s.videoControls]}>
+            <View
+              style={[s.controls, compact && s.compactControls, remoteVideo && s.videoControls]}
+            >
               {incoming && (
                 <View style={s.callActions}>
-                  <CallAction label={t('Decline')} onPress={commands.decline} />
-                  <CallAction label={t('Answer')} onPress={() => void commands.accept()} answer />
+                  <CallAction compact={compact} label={t('Decline')} onPress={commands.decline} />
+                  <CallAction
+                    compact={compact}
+                    label={t('Answer')}
+                    onPress={() => void commands.accept()}
+                    answer
+                  />
                 </View>
+              )}
+              {active && state.muted && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Unmute')}
+                  disabled={!mediaActive}
+                  onPress={commands.toggleMute}
+                  style={({ pressed }) => [s.muteBanner, pressed && { opacity: 0.8 }]}
+                >
+                  <Text accessibilityLiveRegion="polite" style={s.muteNotice}>
+                    {t('Microphone off')}
+                  </Text>
+                  <Text style={s.unmuteAction}>{t('Unmute')}</Text>
+                </Pressable>
               )}
               {active && (
                 <View style={s.toggles}>
                   <Control
+                    compact={compact}
                     label={t(state.muted ? 'Unmute' : 'Mute')}
                     selected={state.muted}
                     disabled={!mediaActive}
@@ -203,6 +277,7 @@ export function InterviewView({
                   {state.mode === 'video' && (
                     <>
                       <Control
+                        compact={compact}
                         label={t(state.cameraOn ? 'Turn camera off' : 'Turn camera on')}
                         selected={!state.cameraOn}
                         disabled={!mediaActive}
@@ -211,6 +286,7 @@ export function InterviewView({
                         <CallIcon off={!state.cameraOn} />
                       </Control>
                       <Control
+                        compact={compact}
                         label={t('Switch camera')}
                         disabled={!mediaActive || !state.cameraOn}
                         onPress={commands.switchCamera}
@@ -223,7 +299,7 @@ export function InterviewView({
               )}
               {active && (
                 <View style={s.callActions}>
-                  <CallAction label={t('End call')} onPress={commands.hangUp} />
+                  <CallAction compact={compact} label={t('End call')} onPress={commands.hangUp} />
                 </View>
               )}
             </View>
@@ -254,21 +330,28 @@ function CallAction({
   label,
   onPress,
   answer = false,
+  compact = false,
 }: {
   label: string;
   onPress: () => void;
   answer?: boolean;
+  compact?: boolean;
 }) {
+  const press = useCallPress();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => [s.callAction, pressed && s.pressed]}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={s.callAction}
     >
-      <View style={[s.callActionIcon, answer && s.answer]}>
+      <Animated.View
+        style={[s.callActionIcon, compact && s.compactActionIcon, answer && s.answer, press.style]}
+      >
         <PhoneIcon color="#FFF" hangUp={!answer} />
-      </View>
+      </Animated.View>
       <Text style={s.actionLabel}>{label}</Text>
     </Pressable>
   );
@@ -279,12 +362,15 @@ function Control({
   disabled,
   onPress,
   children,
+  compact = false,
 }: React.PropsWithChildren<{
   label: string;
+  compact?: boolean;
   selected?: boolean;
   disabled?: boolean;
   onPress: () => void;
 }>) {
+  const press = useCallPress(disabled);
   return (
     <Pressable
       accessibilityRole="button"
@@ -292,9 +378,20 @@ function Control({
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [s.control, (pressed || disabled) && { opacity: 0.6 }]}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={[s.control, compact && s.compactControl, disabled && { opacity: 0.4 }]}
     >
-      <View style={[s.controlIcon, selected && s.selected]}>{children}</View>
+      <Animated.View
+        style={[
+          s.controlIcon,
+          compact && s.compactControlIcon,
+          selected && s.selected,
+          press.style,
+        ]}
+      >
+        {children}
+      </Animated.View>
       <Text numberOfLines={2} style={s.controlLabel}>
         {label}
       </Text>
@@ -302,6 +399,48 @@ function Control({
   );
 }
 const s = StyleSheet.create({
+  compactHeading: { paddingVertical: 6 },
+  compactIdentity: { gap: 6 },
+  compactName: { fontSize: 22 },
+  compactLocal: { width: 76, height: 108, right: 12, borderRadius: 16 },
+  compactControls: { gap: 6, paddingTop: 8 },
+  compactControl: { minHeight: 68 },
+  compactControlIcon: { width: 48, height: 48, borderRadius: 24 },
+  compactActionIcon: { width: 56, height: 56, borderRadius: 28 },
+  muteBanner: {
+    minHeight: 44,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    backgroundColor: '#D3455A16',
+    borderWidth: 1,
+    borderColor: '#D3455A30',
+    paddingHorizontal: 12,
+  },
+  unmuteAction: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  muteNotice: { color: '#FFC4CD', fontSize: 13, textAlign: 'center', paddingVertical: 8 },
+  reconnectingDot: { backgroundColor: '#F0CA7D' },
+  cameraOff: {
+    flex: 1,
+    backgroundColor: '#232635',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  previewLabel: { color: colors.muted, fontSize: 11, textAlign: 'center' },
+  previewBadge: {
+    position: 'absolute',
+    bottom: 7,
+    left: 8,
+    backgroundColor: '#101116B0',
+    color: '#FFF',
+    fontSize: 11,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: 24 },
   remote: { ...StyleSheet.absoluteFill, backgroundColor: '#080A10' },
   hiddenVideo: { opacity: 0 },
@@ -370,7 +509,13 @@ const s = StyleSheet.create({
   statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent },
   incomingDot: { backgroundColor: '#69D6A3' },
   videoStatus: { backgroundColor: '#101116E8', padding: 8, borderRadius: 12 },
-  clock: { color: colors.text, fontVariant: ['tabular-nums'] },
+  clock: {
+    minWidth: 76,
+    fontSize: 18,
+    letterSpacing: 1,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
   local: {
     position: 'absolute',
     right: 20,
@@ -382,7 +527,14 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  controls: { gap: 12, width: '100%', maxWidth: 480, alignSelf: 'center' },
+  controls: {
+    gap: 16,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    paddingTop: 18,
+    paddingBottom: 4,
+  },
   videoControls: {
     backgroundColor: '#101116E8',
     borderRadius: 28,

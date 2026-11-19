@@ -55,8 +55,8 @@ export function MessageComposer({
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [focused, setFocused] = useState(false);
   const sendOpacity = useChatProgress(draft.trim() || sending ? 1 : 0.4, 120);
-  const sendPress = useChatPress();
-  const emojiPress = useChatPress();
+  const sendPress = useChatPress(!draft.trim() || sending);
+  const emojiPress = useChatPress(sending);
   const appearance = useMessageArrival(true);
   useEffect(() => {
     if (!actionKey) return;

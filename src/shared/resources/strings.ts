@@ -8,6 +8,20 @@ export type StringTranslations = readonly [
 ];
 
 export const strings: Readonly<Record<string, StringTranslations>> = {
+  'Camera off': [
+    'Cámara apagada',
+    'Caméra désactivée',
+    'Kamera aus',
+    '摄像头已关闭',
+    'カメラはオフです',
+  ],
+  'Microphone off': [
+    'Micrófono apagado',
+    'Microphone désactivé',
+    'Mikrofon aus',
+    '麦克风已关闭',
+    'マイクはオフです',
+  ],
   'Preparing file…': [
     'Preparando archivo…',
     'Préparation du fichier…',

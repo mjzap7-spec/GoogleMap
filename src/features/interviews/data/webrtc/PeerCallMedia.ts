@@ -6,6 +6,7 @@ import type {
   InterviewMode,
   MediaPreview,
 } from '../../models/interview';
+import { speechPacketTiming } from './audioPacketTiming';
 
 export interface RtcTrack {
   enabled: boolean;
@@ -44,6 +45,13 @@ interface AudioStat {
   packetsReceived?: number;
   totalAudioEnergy?: number;
   audioLevel?: number;
+  id?: string;
+  selectedCandidatePairId?: string;
+  currentRoundTripTime?: number;
+  jitter?: number;
+  jitterBufferDelay?: number;
+  jitterBufferEmittedCount?: number;
+  packetsLost?: number;
 }
 export interface IceServer {
   urls: string | string[];
@@ -140,6 +148,11 @@ export async function openPeerMedia(
         const audio = [...stats.values()].filter(
           (stat) => (stat.kind ?? stat.mediaType) === 'audio',
         );
+        const inbound = audio.find((stat) => stat.type === 'inbound-rtp');
+        const selectedId = [...stats.values()].find(
+          (stat) => stat.type === 'transport',
+        )?.selectedCandidatePairId;
+        const path = selectedId ? stats.get(selectedId) : undefined;
         console.info('[Interview] Audio stats:', {
           sent: audio.find((stat) => stat.type === 'outbound-rtp')?.packetsSent,
           received: audio.find((stat) => stat.type === 'inbound-rtp')?.packetsReceived,
@@ -148,6 +161,17 @@ export async function openPeerMedia(
           receivedEnergy: audio.find((stat) => stat.type === 'inbound-rtp')?.totalAudioEnergy,
           receivedLevel: audio.find((stat) => stat.type === 'inbound-rtp')?.audioLevel,
           microphoneEnabled: local.getAudioTracks().map((track) => track.enabled),
+          networkRoundTripMs:
+            path?.currentRoundTripTime === undefined
+              ? undefined
+              : Math.round(path.currentRoundTripTime * 1000),
+          receiveJitterMs:
+            inbound?.jitter === undefined ? undefined : Math.round(inbound.jitter * 1000),
+          averageReceiveBufferMs:
+            inbound?.jitterBufferEmittedCount && inbound.jitterBufferDelay !== undefined
+              ? Math.round((inbound.jitterBufferDelay / inbound.jitterBufferEmittedCount) * 1000)
+              : undefined,
+          packetsLost: inbound?.packetsLost,
         });
       } catch {
         // Diagnostics must never affect the call.
@@ -196,7 +220,7 @@ export async function openPeerMedia(
     return {
       local: preview(local),
       async offer() {
-        const offer = await peer.createOffer({});
+        const offer = speechPacketTiming(await peer.createOffer({}));
         if (closed) throw Error('Closed');
         await peer.setLocalDescription(offer);
         return { type: 'offer', sdp: peer.localDescription!.sdp };
@@ -204,7 +228,7 @@ export async function openPeerMedia(
       async answer(offer) {
         await peer.setRemoteDescription(offer);
         if (closed) throw Error('Closed');
-        const answer = await peer.createAnswer();
+        const answer = speechPacketTiming(await peer.createAnswer());
         await peer.setLocalDescription(answer);
         return { type: 'answer', sdp: peer.localDescription!.sdp };
       },

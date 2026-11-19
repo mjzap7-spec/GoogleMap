@@ -55,29 +55,7 @@ export function useConversationMotion(identity?: string, offset = 8) {
   };
 }
 
-export function useChatPress() {
-  const [scale] = useState(() => new Animated.Value(1));
-  const reduced = useReducedMotion();
-  useEffect(() => {
-    if (reduced !== false) scale.setValue(1);
-    return () => scale.stopAnimation();
-  }, [reduced, scale]);
-  const animate = (value: number) => {
-    scale.stopAnimation();
-    if (reduced !== false) return;
-    Animated.timing(scale, {
-      toValue: value,
-      duration: value === 1 ? motion.buttonReleaseDuration : motion.buttonDuration,
-      easing: Easing.out(Easing.quad),
-      ...driver,
-    }).start();
-  };
-  return {
-    style: { transform: [{ scale }] },
-    onPressIn: () => animate(0.985),
-    onPressOut: () => animate(1),
-  };
-}
+export { usePressMotion as useChatPress } from '../../../shared/motion/usePressMotion';
 
 /** Animate just the newest bubble when it mounts, never the entire transcript on updates. */
 export function useMessageArrival(newest: boolean) {

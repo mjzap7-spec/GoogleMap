@@ -1,5 +1,6 @@
+import { usePressMotion } from '../motion/usePressMotion';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme/colors';
 
 /** Keep list creation beside the collection, including on short screens. */
@@ -16,6 +17,7 @@ export function CollectionToolbar({
   onAction: () => void;
   disabled?: boolean;
 }) {
+  const press = usePressMotion(disabled);
   return (
     <View style={s.row}>
       <View style={s.heading}>
@@ -24,24 +26,29 @@ export function CollectionToolbar({
         </Text>
         {count !== undefined && <Text style={s.count}>{count}</Text>}
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={action}
-        accessibilityState={{ disabled }}
-        disabled={disabled}
-        onPress={onAction}
-        style={({ pressed }) => [s.action, disabled && s.disabled, pressed && s.pressed]}
-      >
-        <View accessible={false} style={s.plus}>
-          <View style={s.stroke} />
-          <View style={[s.stroke, s.vertical]} />
-        </View>
-        <Text style={s.actionText}>{action}</Text>
-      </Pressable>
+      <Animated.View style={[s.actionContainer, press.style]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={action}
+          accessibilityState={{ disabled }}
+          disabled={disabled}
+          onPress={onAction}
+          onPressIn={press.onPressIn}
+          onPressOut={press.onPressOut}
+          style={({ pressed }) => [s.action, disabled && s.disabled, pressed && s.pressed]}
+        >
+          <View accessible={false} style={s.plus}>
+            <View style={s.stroke} />
+            <View style={[s.stroke, s.vertical]} />
+          </View>
+          <Text style={s.actionText}>{action}</Text>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
 const s = StyleSheet.create({
+  actionContainer: { maxWidth: '100%', flexShrink: 1 },
   row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -77,5 +84,5 @@ const s = StyleSheet.create({
   },
   vertical: { transform: [{ rotate: '90deg' }] },
   disabled: { opacity: 0.5 },
-  pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
+  pressed: { opacity: 0.8 },
 });
