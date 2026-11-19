@@ -52,6 +52,7 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
   private publishing = new Set<string>();
   private published = new Set<string>();
   private stopRequested = false;
+  private memberProfiles = new Map<string, string>();
   private observedPreferences: SharingPreferences = { nearby: false, groups: false };
   constructor(
     private repository: SharingRepository | undefined,
@@ -82,11 +83,15 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
     if (user.id !== this.user.id) return;
     const changed = this.user.fullName !== user.fullName || this.user.avatarUrl !== user.avatarUrl;
     this.user = user;
-    if (changed) this.queue();
+    if (changed) {
+      this.syncMemberProfiles();
+      this.queue();
+    }
   };
   start = () => {
     if (this.state.busy) return;
     this.stops.forEach((stop) => stop());
+    this.memberProfiles.clear();
     this.stopLocationFeeds();
     this.update({
       error: '',
@@ -132,6 +137,7 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
           if (version !== this.generation) return;
           this.update({ groups, membershipsLoaded: true, membershipError: '' });
           this.syncLocationFeeds(groups);
+          this.syncMemberProfiles();
           if (
             !groups.some(
               (group) =>
@@ -158,6 +164,7 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
     clearInterval(this.timer);
     this.timer = setInterval(() => {
       this.refreshLocations();
+      this.syncMemberProfiles();
       this.queue();
     }, 30000);
   };
@@ -232,6 +239,26 @@ export class SharingViewModel extends NoticeViewModel<SharingState> {
   selectGroup = (selectedId: string) => {
     this.update({ selectedId });
   };
+  private syncMemberProfiles() {
+    const { user, repository } = this;
+    if (!repository?.updateMemberProfile || !user.fullName || user.profileSyncPending) return;
+    if (!this.state.membershipsLoaded) return;
+    const groups = this.state.groups.filter((group) => group.joinedIds.includes(user.id));
+    const joined = new Set(groups.map((group) => group.id));
+    const version = this.generation;
+    const profile = JSON.stringify([user.fullName, user.avatarUrl ?? null]);
+    for (const id of this.memberProfiles.keys()) {
+      if (!joined.has(id)) this.memberProfiles.delete(id);
+    }
+    for (const { id } of groups) {
+      if (this.memberProfiles.get(id) === profile) continue;
+      this.memberProfiles.set(id, profile);
+      void repository.updateMemberProfile(user, id).catch(() => {
+        if (this.generation === version && this.memberProfiles.get(id) === profile)
+          this.memberProfiles.delete(id);
+      });
+    }
+  }
   private stopLocationFeeds() {
     const feeds = [...this.locationFeeds.values()];
     this.locationFeeds.clear();

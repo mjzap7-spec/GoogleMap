@@ -30,6 +30,13 @@ module.exports = defineConfig([
     languageOptions: { globals: { __dirname: 'readonly' } },
   },
   {
+    files: ['src/application/**/*.ts'],
+    rules: restrict(
+      [...backend, ...presentation],
+      'Application factories compose model contracts and ViewModels. Concrete adapters belong in bootstrap.',
+    ),
+  },
+  {
     files: ['src/features/*/models/**/*.ts'],
     rules: restrict(
       [...backend, ...presentation, '**/viewmodels/**'],

@@ -213,16 +213,21 @@ export function visibleConversations(
   term: string,
   collapsedGroupId?: string,
 ) {
+  const normalize = (value: string) =>
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase();
+  const query = normalize(term.trim());
+  const matchesSearch = (row: Conversation) =>
+    normalize(row.name).includes(query) ||
+    (!!query && normalize(row.preview?.text ?? '').includes(query));
   return rows.flatMap((row) => {
-    const matches = row.name.toLocaleLowerCase().includes(term);
+    const matches = matchesSearch(row);
     if (!row.members) return matches ? [row] : [];
     const expanded = 'groupId' in row.target && row.target.groupId === expandedGroupId;
     const children =
-      expanded && matches
-        ? row.members
-        : term
-          ? row.members.filter((m) => m.name.toLocaleLowerCase().includes(term))
-          : [];
+      expanded && matches ? row.members : query ? row.members.filter(matchesSearch) : [];
     const collapsed = 'groupId' in row.target && row.target.groupId === collapsedGroupId;
     return matches || children.length ? [row, ...(collapsed ? [] : children)] : [];
   });

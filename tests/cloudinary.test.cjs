@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   CloudinaryAvatarStorage,
-} = require('../.test-build/features/auth/data/CloudinaryAvatarStorage');
+} = require('../.test-build/features/auth/data/http/CloudinaryAvatarStorage');
 const config = { cloudName: 'test-cloud', uploadPreset: 'avatar-preset' };
 const avatar = { uri: 'file:///photo.jpg', base64: '/9j/AA==', contentType: 'image/jpeg' };
 const url = 'https://res.cloudinary.com/test-cloud/image/upload/v1/avatar.jpg';

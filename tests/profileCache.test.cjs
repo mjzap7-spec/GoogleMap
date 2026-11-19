@@ -1,6 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { StoredProfileCache } = require('../.test-build/features/auth/data/StoredProfileCache');
+const {
+  StoredProfileCache,
+} = require('../.test-build/features/auth/data/storage/StoredProfileCache');
 const { createFirebaseFixture } = require('./helpers/firebaseSdkFixture.cjs');
 const profile = {
   fullName: 'Alex',

@@ -25,6 +25,7 @@
     },
     "scheme": "nest-auth",
     "plugins": [
+      "expo-sharing",
       "expo-router",
       [
         "expo-audio",

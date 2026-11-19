@@ -95,7 +95,11 @@ export interface CallMediaSession {
 }
 export interface CallMedia {
   prepare?(): Promise<unknown>;
-  open(mode: InterviewMode, events: CallMediaEvents): Promise<CallMediaSession>;
+  open(
+    mode: InterviewMode,
+    events: CallMediaEvents,
+    signal?: AbortSignal,
+  ): Promise<CallMediaSession>;
 }
 export function interviewTarget(
   peer: ChatPeer | undefined,

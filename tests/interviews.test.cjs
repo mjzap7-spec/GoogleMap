@@ -4,7 +4,7 @@ const {
   InterviewViewModel,
 } = require('../.test-build/features/interviews/viewmodels/InterviewViewModel');
 const { interviewTarget } = require('../.test-build/features/interviews/models/interview');
-const { openPeerMedia } = require('../.test-build/features/interviews/data/PeerCallMedia');
+const { openPeerMedia } = require('../.test-build/features/interviews/data/webrtc/PeerCallMedia');
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const target = { id: 'bob', name: 'Bob', kind: 'contact', contextId: 'alice_bob' };
 const candidate = { candidate: 'candidate:1', sdpMid: '0', sdpMLineIndex: 0 };
@@ -343,6 +343,28 @@ test('ringing, connecting and network disconnect have bounded waits', async (t) 
   t.mock.timers.tick(10000);
   assert.equal(h.vm.getSnapshot().result, 'Connection lost');
 });
+
+test('reconnecting preserves the call clock and writes the connection time once', async (t) => {
+  const h = harness(t);
+  let writes = 0;
+  h.repo.connected = async () => {
+    writes++;
+  };
+  h.vm.choose(target);
+  await h.vm.begin('voice');
+  h.events.connection('connected');
+  const connected = h.vm.getSnapshot();
+  assert.equal(typeof connected.connectedSince, 'number');
+  h.events.connection('connected');
+  assert.equal(h.vm.getSnapshot(), connected);
+  h.events.connection('disconnected');
+  assert.equal(h.vm.getSnapshot().connectedSince, connected.connectedSince);
+  h.events.connection('connected');
+  assert.equal(h.vm.getSnapshot().connectedSince, connected.connectedSince);
+  assert.equal(writes, 1);
+  h.vm.hangUp();
+  assert.equal(h.vm.getSnapshot().connectedSince, undefined);
+});
 test('synchronous snapshot failure unsubscribes even before watch returns', async (t) => {
   const h = harness(t);
   let stopped = 0;
@@ -475,5 +497,70 @@ test('voice never requests camera and peer initialization failure releases captu
     ),
   );
   assert.equal(request.video, false);
+  assert.equal(stopped, 1);
+});
+
+test('permission rejection reports immediately even while relay setup is pending', async () => {
+  const denied = Error('denied');
+  denied.name = 'NotAllowedError';
+  await assert.rejects(
+    openPeerMedia(
+      {
+        mediaDevices: {
+          getUserMedia: async () => {
+            throw denied;
+          },
+        },
+        RTCPeerConnection: class {},
+      },
+      new Promise(() => {}),
+      'voice',
+      {},
+    ),
+    /Allow microphone/,
+  );
+});
+
+test('failed relay setup releases capture that arrives after failure', async () => {
+  let complete;
+  let stopped = 0;
+  const capture = new Promise((resolve) => {
+    complete = resolve;
+  });
+  await assert.rejects(
+    openPeerMedia(
+      {
+        mediaDevices: { getUserMedia: () => capture },
+        RTCPeerConnection: class {},
+      },
+      Promise.reject(Error('relay unavailable')),
+      'video',
+      {},
+    ),
+    /relay unavailable/,
+  );
+  complete({ getTracks: () => [{ stop: () => stopped++ }] });
+  await tick();
+  assert.equal(stopped, 1);
+});
+
+test('cancelling setup releases microphone immediately while relay remains pending', async () => {
+  let stopped = 0;
+  const controller = new AbortController();
+  const setup = openPeerMedia(
+    {
+      mediaDevices: {
+        getUserMedia: async () => ({ getTracks: () => [{ stop: () => stopped++ }] }),
+      },
+      RTCPeerConnection: class {},
+    },
+    new Promise(() => {}),
+    'voice',
+    {},
+    controller.signal,
+  );
+  await tick();
+  controller.abort();
+  await assert.rejects(setup, /cancelled/);
   assert.equal(stopped, 1);
 });

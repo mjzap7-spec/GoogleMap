@@ -5,7 +5,7 @@ const { AuthFormViewModel } = require('../.test-build/features/auth/viewmodels/A
 const { createFirebaseFixture } = require('./helpers/firebaseSdkFixture.cjs');
 const {
   OpenMeteoCityRepository,
-} = require('../.test-build/features/auth/data/OpenMeteoCityRepository');
+} = require('../.test-build/features/auth/data/http/OpenMeteoCityRepository');
 const { validateProfile } = require('../.test-build/features/auth/models/validation');
 const city = {
   id: '1',

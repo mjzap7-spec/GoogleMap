@@ -32,6 +32,7 @@ export interface InterviewState {
   error: string;
   result: string;
   listeningError: boolean;
+  connectedSince?: number;
 }
 /** One account-scoped call. Views never access signaling or native media directly. */
 export class InterviewViewModel extends ObservableViewModel<InterviewState> {
@@ -40,6 +41,7 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
   private incomingStop?: () => void;
   private callStops: (() => void)[] = [];
   private media?: CallMediaSession;
+  private mediaAbort?: AbortController;
   private timer?: ReturnType<typeof setTimeout>;
   private disconnectTimer?: ReturnType<typeof setTimeout>;
   private ignored = new Set<string>();
@@ -276,37 +278,52 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
   };
   private async openMedia(version: number, mode: InterviewMode) {
     if (!this.devices) throw Error('Rebuild the development app to enable interview calls.');
-    const media = await this.devices.open(mode, {
-      remote: (remote) => {
-        if (version === this.revision) this.update({ remote });
+    const controller = new AbortController();
+    this.mediaAbort = controller;
+    const media = await this.devices.open(
+      mode,
+      {
+        remote: (remote) => {
+          if (version === this.revision) this.update({ remote });
+        },
+        candidate: (candidate) => {
+          if (
+            version !== this.revision ||
+            this.candidateIndex + this.outgoingCandidates.length >= 64
+          )
+            return;
+          this.outgoingCandidates.push(candidate);
+          this.flushCandidates();
+        },
+        connection: (status) => {
+          if (version !== this.revision) return;
+          if (status === 'connected') {
+            if (this.state.phase === 'connected') return;
+            const firstConnection = this.state.connectedSince === undefined;
+            clearTimeout(this.timer);
+            clearTimeout(this.disconnectTimer);
+            this.disconnectTimer = undefined;
+            this.update({
+              phase: 'connected',
+              connectedSince: this.state.connectedSince ?? this.now(),
+            });
+            const call = this.state.call;
+            if (firstConnection && call)
+              void this.repo?.connected?.(this.uid, call.id).catch(() => {});
+            this.arm(
+              Math.max(0, (this.state.call?.validUntil ?? this.now() + 7200000) - this.now()),
+              'Interview ended',
+            );
+          } else if (status === 'failed')
+            this.end('The call could not connect. Check your internet connection and try again.');
+          else if (!this.disconnectTimer) {
+            if (this.state.phase === 'connected') this.update({ phase: 'reconnecting' });
+            this.disconnectTimer = setTimeout(() => this.end('Connection lost'), 10000);
+          }
+        },
       },
-      candidate: (candidate) => {
-        if (version !== this.revision || this.candidateIndex + this.outgoingCandidates.length >= 64)
-          return;
-        this.outgoingCandidates.push(candidate);
-        this.flushCandidates();
-      },
-      connection: (status) => {
-        if (version !== this.revision) return;
-        if (status === 'connected') {
-          clearTimeout(this.timer);
-          clearTimeout(this.disconnectTimer);
-          this.disconnectTimer = undefined;
-          this.update({ phase: 'connected' });
-          const call = this.state.call;
-          if (call) void this.repo?.connected?.(this.uid, call.id).catch(() => {});
-          this.arm(
-            Math.max(0, (this.state.call?.validUntil ?? this.now() + 7200000) - this.now()),
-            'Interview ended',
-          );
-        } else if (status === 'failed')
-          this.end('The call could not connect. Check your internet connection and try again.');
-        else if (!this.disconnectTimer) {
-          if (this.state.phase === 'connected') this.update({ phase: 'reconnecting' });
-          this.disconnectTimer = setTimeout(() => this.end('Connection lost'), 10000);
-        }
-      },
-    });
+      controller.signal,
+    );
     if (version !== this.revision || !this.foreground) {
       media.close();
       return;
@@ -446,6 +463,8 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
     if (this.ignored.size > 256) this.ignored.delete(this.ignored.values().next().value!);
   }
   private release() {
+    this.mediaAbort?.abort();
+    this.mediaAbort = undefined;
     this.revision++;
     clearTimeout(this.timer);
     clearTimeout(this.disconnectTimer);
@@ -457,6 +476,6 @@ export class InterviewViewModel extends ObservableViewModel<InterviewState> {
     this.candidateIndex = 0;
     this.applyingAnswer = false;
     this.answerPublished = false;
-    this.update({ local: undefined, remote: undefined });
+    this.update({ local: undefined, remote: undefined, connectedSince: undefined });
   }
 }

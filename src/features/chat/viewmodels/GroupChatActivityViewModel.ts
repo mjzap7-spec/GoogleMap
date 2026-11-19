@@ -34,15 +34,29 @@ export class GroupChatActivityViewModel extends ObservableViewModel<{
         if (this.watches.get(key) !== current) return;
         const previous = this.state.entries.get(key);
         // Record the first (even empty) result so entry routing knows it has loaded.
-        // Repeated empty snapshots and metadata acknowledgements need no list update.
+        // Repeated rosters and metadata acknowledgements need no list update.
+        const sameCards =
+          value.cards === previous?.cards ||
+          (!!value.cards &&
+            !!previous?.cards &&
+            value.cards.length === previous.cards.length &&
+            value.cards.every((card, index) => {
+              const old = previous.cards![index];
+              return (
+                card.id === old.id && card.name === old.name && card.avatarUrl === old.avatarUrl
+              );
+            }));
         if (
           previous &&
-          !value.cards &&
-          !previous?.cards &&
+          sameCards &&
           value.failed === previous?.failed &&
           value.latest?.id === previous?.latest?.id &&
           value.latest?.time === previous?.latest?.time &&
-          value.latest?.text === previous?.latest?.text
+          value.latest?.text === previous?.latest?.text &&
+          value.latest?.fromId === previous?.latest?.fromId &&
+          value.latest?.senderName === previous?.latest?.senderName &&
+          value.latest?.pending === previous?.latest?.pending &&
+          value.latest?.edited === previous?.latest?.edited
         )
           return;
         this.update({ entries: new Map(this.state.entries).set(key, value) });

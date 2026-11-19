@@ -17,6 +17,8 @@ import { useChatPress, useChatProgress, useMessageArrival } from './chatMotion';
 import { EmojiPicker } from './EmojiPicker';
 
 export function MessageComposer({
+  onDirectSend,
+  directBusy,
   height,
   onHeightChange,
   draft,
@@ -29,6 +31,8 @@ export function MessageComposer({
   editing = false,
   onCancelAction,
 }: {
+  onDirectSend?: () => void;
+  directBusy?: boolean;
   height: number;
   onHeightChange: (height: number) => void;
   draft: string;
@@ -82,6 +86,16 @@ export function MessageComposer({
   );
   return (
     <Animated.View pointerEvents="box-none" style={[s.container, appearance]}>
+      {emojiOpen && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('Close')}
+          onPress={() => {
+            closeEmoji();
+          }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
       <EmojiPicker
         open={emojiOpen}
         bottom={height + 8}
@@ -117,6 +131,21 @@ export function MessageComposer({
           </View>
         )}
         <View style={s.inputRow}>
+          {onDirectSend && !editing && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('Attach file')}
+              disabled={sending || directBusy}
+              onPress={() => {
+                closeEmoji();
+                Keyboard.dismiss();
+                onDirectSend();
+              }}
+              style={({ pressed }) => [s.emoji, pressed && s.pressed]}
+            >
+              <Text style={s.cancel}>＋</Text>
+            </Pressable>
+          )}
           <View style={[s.field, (focused || emojiOpen) && s.focused]}>
             <Animated.View style={emojiPress.style}>
               <Pressable

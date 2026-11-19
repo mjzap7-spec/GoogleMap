@@ -1,0 +1,20 @@
+name = "googlemap-chat-files"
+main = "worker.mjs"
+compatibility_date = "2025-11-01"
+workers_dev = true
+preview_urls = false
+
+# Set this ID to the namespace created with wrangler kv namespace create FILES.
+[[kv_namespaces]]
+binding = "FILES"
+id = "eb80e8b3aaf043e7b35d29aa72e333bb"
+
+[[ratelimits]]
+name = "FILE_LIMIT"
+namespace_id = "872003"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "UPLOAD_LIMIT"
+namespace_id = "872004"
+simple = { limit = 10, period = 60 }

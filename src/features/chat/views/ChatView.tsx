@@ -31,6 +31,7 @@ import type { PrivateGroup } from '../../contacts/models/sharing';
 import { ConversationRow } from './ConversationRow';
 import { useConversationMotion } from './chatMotion';
 import { CallIcon } from '../../interviews/views/CallIcon';
+const normalizedSearch = (value: string) => value.trim().toLocaleLowerCase();
 interface Props {
   rows: Conversation[];
   compact: boolean;
@@ -91,7 +92,8 @@ export function ChatView({
   // Folding a roster is local UI state, independent of the open conversation.
   const [collapsedGroupId, setCollapsedGroupId] = useState<string>();
   const expandedGroupId = expandedGroup?.id === collapsedGroupId ? undefined : expandedGroup?.id;
-  const term = useDeferredValue(search.trim().toLocaleLowerCase());
+  const term = useDeferredValue(normalizedSearch(search));
+  const searchPending = term !== normalizedSearch(search);
   const filtered = useMemo(
     () =>
       visibleConversations(
@@ -247,6 +249,11 @@ export function ChatView({
               </Pressable>
             ))}
           </View>
+          {!!search.trim() && (
+            <Text accessibilityLiveRegion="polite" style={s.searchSummary}>
+              {searchPending ? t('Searching…') : t('{count} results', { count: filtered.length })}
+            </Text>
+          )}
         </View>
       )}
       {!!error && (
@@ -271,8 +278,9 @@ export function ChatView({
           keyExtractor={(row) => row.key}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          accessibilityState={{ busy: searchPending }}
           ListEmptyComponent={
-            loading ? (
+            error ? undefined : loading ? (
               <ActivityIndicator color={colors.accent} />
             ) : (
               <View style={s.emptyState}>
@@ -388,6 +396,13 @@ const s = StyleSheet.create({
   },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   searchInput: { flex: 1, minWidth: 0 },
+  searchSummary: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    paddingBottom: 10,
+    paddingHorizontal: 4,
+  },
   compose: {
     width: 48,
     height: 48,

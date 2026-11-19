@@ -67,7 +67,7 @@ export function useChatPress() {
     if (reduced !== false) return;
     Animated.timing(scale, {
       toValue: value,
-      duration: value === 1 ? 130 : 70,
+      duration: value === 1 ? motion.buttonReleaseDuration : motion.buttonDuration,
       easing: Easing.out(Easing.quad),
       ...driver,
     }).start();

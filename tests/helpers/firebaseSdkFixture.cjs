@@ -123,14 +123,12 @@ function createFirebaseFixture(overrides = {}) {
     }
   }
   mocks['../../../../config/firebase/client'] = mocks['../../../config/firebase/client'];
-  const filename = require.resolve('../../.test-build/features/auth/data/FirebaseAuthRepository');
+  const filename =
+    require.resolve('../../.test-build/features/auth/data/firebase/FirebaseAuthRepository');
   for (const cached of Object.keys(require.cache)) {
     if (
       cached === filename ||
-      cached.startsWith(
-        require('node:path').join(require('node:path').dirname(filename), 'firebase') +
-          require('node:path').sep,
-      )
+      cached.startsWith(require('node:path').dirname(filename) + require('node:path').sep)
     )
       delete require.cache[cached];
   }

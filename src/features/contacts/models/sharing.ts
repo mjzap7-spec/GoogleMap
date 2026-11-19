@@ -115,6 +115,7 @@ export interface SharingRepository {
     error: (error: unknown) => void,
   ): () => void;
   createGroup(userId: string, name: string): Promise<string>;
+  updateMemberProfile?(user: AuthUser, groupId: string): Promise<void>;
   observeDirectory(
     userId: string,
     next: (groups: DirectoryGroup[]) => void,

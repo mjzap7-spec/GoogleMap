@@ -1,3 +1,4 @@
+import { directTransferId } from '../models/directTransfer';
 import { ObservableViewModel } from '../../../shared/mvvm/ObservableViewModel';
 import {
   compareTime,
@@ -9,6 +10,7 @@ import {
   type ChatRepository,
 } from '../models/chat';
 import { MAX_MESSAGE_LENGTH } from '../models/messageDraft';
+import { parseAttachment } from '../models/attachments';
 import { historyFilter, newerTime, type LocalChatHistory } from '../models/localChatHistory';
 export interface ClearChatTarget {
   through?: ReadTime;
@@ -407,6 +409,7 @@ export class ChatViewModel extends ObservableViewModel<ChatState> {
     const message = this.state.messages.find((item) => item.id === messageId);
     if (
       !message ||
+      !!(parseAttachment(message.text) || directTransferId(message.text)) ||
       message.fromId !== this.uid ||
       message.pending ||
       this.state.sending ||

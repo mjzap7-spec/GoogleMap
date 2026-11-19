@@ -1,4 +1,4 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme/colors';
 import { avatarImageUrl } from '../utils/avatarImageUrl';
@@ -12,9 +12,6 @@ export const Avatar = memo(function Avatar({
   name: string;
   size?: number;
 }) {
-  const [failed, setFailed] = useState<string | null>(null);
-  const thumbnail = uri ? avatarImageUrl(uri, size * 2) : undefined;
-  const imageUri = failed === thumbnail ? uri : thumbnail;
   return (
     <View
       accessible={false}
@@ -23,17 +20,37 @@ export const Avatar = memo(function Avatar({
       <Text style={[styles.initial, { fontSize: size * 0.4 }]}>
         {Array.from(name.trim())[0]?.toUpperCase() || '?'}
       </Text>
-      {!!uri && !!imageUri && failed !== uri && (
-        <Image
-          source={{ uri: imageUri }}
-          onError={() => setFailed(imageUri)}
-          fadeDuration={120}
-          style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
-        />
-      )}
+      {uri && <AvatarImage key={uri} uri={uri} size={size} />}
     </View>
   );
 });
+function AvatarImage({ uri, size }: { uri: string; size: number }) {
+  const thumbnail = avatarImageUrl(uri, size * 2);
+  const [attempt, setAttempt] = useState<'thumbnail' | 'original' | 'waiting' | 'retry' | 'failed'>(
+    thumbnail === uri ? 'original' : 'thumbnail',
+  );
+  useEffect(() => {
+    if (attempt !== 'waiting') return;
+    const retry = setTimeout(() => setAttempt('retry'), 1000);
+    return () => clearTimeout(retry);
+  }, [attempt]);
+  if (attempt === 'waiting' || attempt === 'failed') return null;
+  return (
+    <Image
+      key={attempt}
+      source={{ uri: attempt === 'thumbnail' ? thumbnail : uri }}
+      onError={() =>
+        setAttempt((current) => {
+          if (current !== attempt) return current;
+          if (attempt === 'thumbnail') return 'original';
+          return attempt === 'original' ? 'waiting' : 'failed';
+        })
+      }
+      fadeDuration={120}
+      style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
+    />
+  );
+}
 const styles = StyleSheet.create({
   frame: {
     backgroundColor: '#BCB5FF18',

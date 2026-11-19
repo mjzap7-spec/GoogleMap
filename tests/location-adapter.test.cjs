@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(
-  require.resolve('../.test-build/features/map/data/ExpoLocationTracker'),
+  require.resolve('../.test-build/features/map/data/device/ExpoLocationTracker'),
   'utf8',
 );
 function fixture({

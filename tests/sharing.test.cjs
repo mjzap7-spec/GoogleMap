@@ -143,6 +143,25 @@ function fixture(overrides = {}) {
   };
 }
 
+test('group member cards refresh when the avatar changes without GPS sharing', (t) => {
+  const profiles = [];
+  const f = fixture({
+    updateMemberProfile: async (profile, groupId) => profiles.push([groupId, profile.avatarUrl]),
+  });
+  t.after(f.model.dispose);
+  const pendingGroup = { ...group, id: 'pending', joinedIds: ['bob'] };
+  f.groups([group, pendingGroup]);
+  const updated = { ...user, avatarUrl: 'https://example.com/new-avatar.png' };
+  f.model.setUser(updated);
+  f.model.setUser({ ...updated });
+  f.groups([group, pendingGroup]);
+  assert.deepEqual(profiles, [
+    ['family', null],
+    ['family', updated.avatarUrl],
+  ]);
+  assert.deepEqual(f.writes, []);
+});
+
 test('group-list failures are isolated from GPS sharing errors and recover independently', () => {
   let groupFailure, directoryFailure, groupNext, directoryNext, locationFailure;
   const f = fixture({

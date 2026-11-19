@@ -1,7 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { StoredChatHistory } = require('../.test-build/features/chat/data/StoredChatHistory');
-const { DeviceChatRepository } = require('../.test-build/features/chat/data/DeviceChatRepository');
+const {
+  StoredChatHistory,
+} = require('../.test-build/features/chat/data/storage/StoredChatHistory');
+const {
+  DeviceChatRepository,
+} = require('../.test-build/features/chat/data/device/DeviceChatRepository');
 const { ChatViewModel } = require('../.test-build/features/chat/viewmodels/ChatViewModel');
 const { historyFilter } = require('../.test-build/features/chat/models/localChatHistory');
 const tick = () => new Promise((done) => setImmediate(done));

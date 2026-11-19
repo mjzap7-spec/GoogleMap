@@ -57,7 +57,7 @@ export const topics = [
   ],
   [
     'Unread messages',
-    'The Chats button shows your total unread message count. Badges beside a person or group show their unread count. Open the conversation and view messages to mark them as read. A collapsed group also includes unread private messages from its members.',
+    'The Chats badge shows your total unread messages. Use the Unread filter in Chats to find conversations with new messages. Open a conversation and view the messages to mark them as read. A collapsed group also counts unread private chats with its members.',
   ],
   [
     'Edit contact',
@@ -78,7 +78,7 @@ export const topics = [
   ],
   [
     'Interview calls',
-    'Open a private conversation and tap the camera button to choose voice or video. The other person can accept or decline. Both people must keep the app open. Use the microphone and camera controls during the call; End interview stops all capture. Group members can call each other privately.',
+    'In a private chat, tap the voice or video button. From Contacts or a contact’s map card, tap the phone icon to choose. Keep the app open while ringing and talking. Invitations stay in chat with the time you called.',
   ],
 ] as const;
 export function screenHelp(path: string, section?: string) {

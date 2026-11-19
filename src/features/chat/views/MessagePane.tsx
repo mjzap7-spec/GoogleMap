@@ -1,3 +1,5 @@
+import { directTransferId } from '../models/directTransfer';
+import { DirectTransferCard, type DirectTransferActions } from './DirectTransferCard';
 import React, {
   memo,
   useCallback,
@@ -30,6 +32,7 @@ import { messageStatus, type MessageStatus } from '../models/messageStatus';
 import { MessageChecks } from './MessageChecks';
 import { ReplyPreview } from './ReplyPreview';
 import { Feedback } from '../../../shared/ui/Feedback';
+import { InlineRetry } from '../../../shared/ui/InlineRetry';
 import { ChatHistorySheet } from './ChatHistorySheet';
 import { MessageSelectionBar } from './MessageSelectionBar';
 import { useLayoutMotion } from '../../../shared/motion/useLayoutMotion';
@@ -42,6 +45,7 @@ import {
 import { CallIcon } from '../../interviews/views/CallIcon';
 import { AnimatedEmoji } from './AnimatedEmoji';
 import { messageEmoji } from '../models/messageEmoji';
+import { parseAttachment, type Attachment } from '../models/attachments';
 type WatchCall = (
   id: string,
   next: (history: CallHistory | undefined) => void,
@@ -50,6 +54,9 @@ type WatchCall = (
 const readVisibility = { viewAreaCoveragePercentThreshold: 1 };
 const scrollAnchor = { minIndexForVisible: 0, autoscrollToTopThreshold: 36 };
 export function MessagePane({
+  direct,
+  fileState,
+  onDownload,
   watchCall,
   uid,
   state,
@@ -59,6 +66,9 @@ export function MessagePane({
   peerName,
   optionsRequest = 0,
 }: {
+  fileState?: { sending: boolean; downloading?: string; error: string };
+  direct?: DirectTransferActions;
+  onDownload?: (file: Attachment) => void;
   watchCall?: WatchCall;
   uid: string;
   groupRoom: boolean;
@@ -132,7 +142,9 @@ export function MessagePane({
           label: t('Replying to {name}', {
             name: state.replying.fromId === uid ? t('You') : state.replying.senderName || peerName,
           }),
-          text: state.replying.text,
+          text: directTransferId(state.replying.text)
+            ? t('File transfer invitation')
+            : (parseAttachment(state.replying.text)?.name ?? state.replying.text),
         }
       : undefined;
   const sendError =
@@ -182,7 +194,11 @@ export function MessagePane({
               : undefined
           }
           onEdit={
-            selected && !selected.pending && selected.fromId === uid
+            selected &&
+            !selected.pending &&
+            selected.fromId === uid &&
+            !parseAttachment(selected.text) &&
+            !directTransferId(selected.text)
               ? () => {
                   animateLayout();
                   commands.edit(selected.id);
@@ -195,21 +211,34 @@ export function MessagePane({
           }}
         />
       )}
+      {!!direct?.state.error && (
+        <Text accessibilityRole="alert" style={s.error}>
+          {t(direct.state.error)}
+        </Text>
+      )}
+      {direct?.state.busy && !direct.state.active && (
+        <View style={s.errorRow}>
+          <Text style={s.accent}>{t('Preparing file…')}</Text>
+          <Pressable accessibilityRole="button" style={s.link} onPress={() => direct.cancel('')}>
+            <Text style={s.accent}>{t('Cancel')}</Text>
+          </Pressable>
+        </View>
+      )}
+      {!!fileState?.error && (
+        <Text accessibilityRole="alert" style={s.error}>
+          {t(fileState.error)}
+        </Text>
+      )}
       {!!error && (
         <View style={s.errorRow}>
-          <Text accessibilityRole="alert" style={s.error}>
-            {t(error)}
-          </Text>
-          <Pressable style={s.link} accessibilityRole="button" onPress={commands.start}>
-            <Text style={s.accent}>{t('Retry')}</Text>
-          </Pressable>
+          <InlineRetry message={error} onRetry={commands.start} />
         </View>
       )}
       {!state.messages.length ? (
         <View style={s.empty}>
           {state.loading ? (
             <ActivityIndicator color={colors.accent} />
-          ) : (
+          ) : state.error ? null : (
             <>
               <Text style={s.emptyHeading}>{t('No messages here yet')}</Text>
               {state.more && (
@@ -222,6 +251,9 @@ export function MessagePane({
         </View>
       ) : (
         <MessageTimeline
+          direct={direct}
+          onDownload={onDownload}
+          downloading={fileState?.downloading}
           watchCall={watchCall}
           uid={uid}
           messages={state.messages}
@@ -240,6 +272,8 @@ export function MessagePane({
       )}
       {!state.selecting && (
         <MessageComposer
+          onDirectSend={state.editing ? undefined : direct?.send}
+          directBusy={direct?.state.busy}
           height={composerHeight}
           onHeightChange={setComposerHeight}
           draft={state.draft}
@@ -285,6 +319,9 @@ export function MessagePane({
   );
 }
 const MessageTimeline = memo(function MessageTimeline({
+  direct,
+  onDownload,
+  downloading,
   watchCall,
   uid,
   messages,
@@ -300,6 +337,9 @@ const MessageTimeline = memo(function MessageTimeline({
   selectedIds,
   onToggle,
 }: {
+  direct?: DirectTransferActions;
+  onDownload?: (file: Attachment) => void;
+  downloading?: string;
   watchCall?: WatchCall;
   uid: string;
   messages: ReturnType<ChatViewModel['getSnapshot']>['messages'];
@@ -382,6 +422,9 @@ const MessageTimeline = memo(function MessageTimeline({
               <Text style={s.date}>{date.format(item.time)}</Text>
             )}
             <MessageBubble
+              direct={direct}
+              onDownload={onDownload}
+              downloading={downloading}
               watchCall={watchCall}
               id={item.id}
               onActions={actionsDisabled ? undefined : onActions}
@@ -409,6 +452,9 @@ const MessageTimeline = memo(function MessageTimeline({
 });
 
 const MessageBubble = memo(function MessageBubble({
+  direct,
+  onDownload,
+  downloading,
   watchCall,
   mine,
   newest,
@@ -428,6 +474,9 @@ const MessageBubble = memo(function MessageBubble({
   selected,
   onToggle,
 }: {
+  direct?: DirectTransferActions;
+  onDownload?: (file: Attachment) => void;
+  downloading?: string;
   watchCall?: WatchCall;
   mine: boolean;
   newest: boolean;
@@ -448,6 +497,8 @@ const MessageBubble = memo(function MessageBubble({
   onToggle?: (id: string) => void;
 }) {
   const { t } = useTranslation();
+  const attachment = parseAttachment(text);
+  const transferId = directTransferId(text);
   const arrival = useMessageArrival(newest);
   const highlight = useChatProgress(selected ? 1 : 0, 160);
   const interview =
@@ -505,7 +556,36 @@ const MessageBubble = memo(function MessageBubble({
           >
             {!!sender && <Text style={s.sender}>{sender}</Text>}
             {reply && <ReplyPreview reply={reply} uid={uid} peerName={peerName} />}
-            {interview ? (
+            {transferId ? (
+              <DirectTransferCard
+                id={transferId}
+                mine={mine}
+                actions={direct}
+                disabled={selecting}
+              />
+            ) : attachment ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('Download file') + ' ' + attachment.name}
+                disabled={!!downloading || selecting}
+                onPress={() => onDownload?.(attachment)}
+                style={s.attachment}
+              >
+                <Text accessible={false} style={s.fileIcon}>
+                  ↓
+                </Text>
+                <View style={s.invitationDetails}>
+                  <Text numberOfLines={2} style={s.invitationTitle}>
+                    {attachment.name}
+                  </Text>
+                  <Text style={s.invitationLabel}>
+                    {Math.ceil(attachment.size / 1024)} KB ·{' '}
+                    {t(downloading === attachment.id ? 'Downloading…' : 'Download file')}
+                  </Text>
+                  <Text style={s.invitationLabel}>{stamp}</Text>
+                </View>
+              </Pressable>
+            ) : interview ? (
               <View style={s.invitation}>
                 <View style={s.invitationIcon}>
                   <CallIcon kind={interview} />
@@ -606,6 +686,14 @@ function CallOutcome({ callId, watchCall }: { callId: string; watchCall?: WatchC
 }
 
 const s = StyleSheet.create({
+  attachment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 6,
+    minHeight: 60,
+  },
+  fileIcon: { color: colors.accent, fontSize: 28 },
   outcomeIcon: { fontSize: 17, fontWeight: '700' },
   pane: { flex: 1, backgroundColor: '#12141B' },
   muted: { color: colors.muted, textAlign: 'center' },
@@ -694,9 +782,6 @@ const s = StyleSheet.create({
   errorRow: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#33202A',
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   error: { color: '#FFB4BE', flex: 1 },
   link: { paddingHorizontal: 10, minHeight: 44, alignItems: 'center', justifyContent: 'center' },

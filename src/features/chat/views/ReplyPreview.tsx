@@ -1,8 +1,10 @@
+import { directTransferId } from '../models/directTransfer';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { colors } from '../../../shared/theme/colors';
 import type { MessageReply } from '../models/chat';
+import { parseAttachment } from '../models/attachments';
 
 export function ReplyPreview({
   reply,
@@ -22,7 +24,11 @@ export function ReplyPreview({
       <Text numberOfLines={2} style={s.text}>
         {reply.unavailable
           ? t('Original message unavailable')
-          : (reply.text ?? t('Loading message…'))}
+          : reply.text !== undefined
+            ? directTransferId(reply.text)
+              ? t('File transfer invitation')
+              : (parseAttachment(reply.text)?.name ?? reply.text)
+            : t('Loading message…')}
       </Text>
     </View>
   );

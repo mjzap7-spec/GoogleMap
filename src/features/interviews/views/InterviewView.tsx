@@ -26,7 +26,7 @@ export function InterviewView({
   const mediaActive =
     !!state.local && ['connecting', 'connected', 'reconnecting', 'outgoing'].includes(state.phase);
   const inCall = state.phase === 'connected' || state.phase === 'reconnecting';
-  const remoteVideo = !!state.remote && state.mode === 'video';
+  const remoteVideo = !!state.remote && state.mode === 'video' && inCall;
   const status =
     state.phase === 'outgoing'
       ? 'Calling…'
@@ -174,7 +174,9 @@ export function InterviewView({
                   </Text>
                 </View>
               )}
-              {inCall && <CallClock visible={state.phase === 'connected'} overlay={remoteVideo} />}
+              {inCall && state.connectedSince !== undefined && (
+                <CallClock started={state.connectedSince} overlay={remoteVideo} />
+              )}
             </View>
             {!!state.local && state.mode === 'video' && state.cameraOn && (
               <View style={[s.local, { top: insets.top + 96 }]}>
@@ -231,14 +233,17 @@ export function InterviewView({
     </Modal>
   );
 }
-function CallClock({ visible, overlay }: { visible: boolean; overlay: boolean }) {
-  const [started] = useState(Date.now);
-  const [seconds, setSeconds] = useState(0);
+function CallClock({ started, overlay }: { started: number; overlay: boolean }) {
+  const [seconds, setSeconds] = useState(() =>
+    Math.max(0, Math.floor((Date.now() - started) / 1000)),
+  );
   useEffect(() => {
-    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
+    const timer = setInterval(
+      () => setSeconds(Math.max(0, Math.floor((Date.now() - started) / 1000))),
+      1000,
+    );
     return () => clearInterval(timer);
   }, [started]);
-  if (!visible) return null;
   return (
     <Text style={[s.status, s.clock, overlay && s.videoStatus]}>
       {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}

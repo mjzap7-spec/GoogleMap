@@ -3,6 +3,23 @@ const assert = require('node:assert/strict');
 const { DismissalReceipts } = require('../.test-build/shared/feedback/DismissalReceipts');
 const { conversationList } = require('../.test-build/features/chat/models/conversations');
 
+test('chat search finds accented names and recent private messages without exposing collapsed members', () => {
+  const { visibleConversations } = require('../.test-build/features/chat/models/conversations');
+  const contact = {
+    key: 'jose',
+    name: 'José',
+    preview: { text: 'Meet tomorrow', time: 1 },
+    target: { peerId: 'jose', requestId: 'r' },
+  };
+  const member = { ...contact, key: 'member:g:jose', target: { groupId: 'g', memberId: 'jose' } };
+  const group = { key: 'group:g', name: 'Friends', target: { groupId: 'g' }, members: [member] };
+  assert.deepEqual(visibleConversations([contact], undefined, 'jose'), [contact]);
+  assert.deepEqual(visibleConversations([contact], undefined, 'TOMORROW'), [contact]);
+  assert.deepEqual(visibleConversations([group], undefined, 'jose'), [group, member]);
+  assert.deepEqual(visibleConversations([group], undefined, 'tomorrow', 'g'), [group]);
+  assert.deepEqual(visibleConversations([contact], undefined, 'absent'), []);
+});
+
 test('chat filters preserve unread private members under their room without changing identities', () => {
   const {
     filterConversations,

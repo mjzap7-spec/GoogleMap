@@ -7,7 +7,7 @@ import { createConversationProjection } from '../models/conversationProjection';
 import { personConversation } from '../models/personConversation';
 import { useConversation } from './useConversation';
 import { useGroupChatActivity } from './useGroupChatActivity';
-import { useUnreadChats } from './UnreadChatsProvider';
+import { useUnreadDirectory } from './UnreadChatsProvider';
 
 /** Bind independent stores to the chat directory projection. Navigation stays in the screen. */
 export function useChatDirectory(uid: string, focused: boolean, pendingPerson?: string) {
@@ -15,7 +15,7 @@ export function useChatDirectory(uid: string, focused: boolean, pendingPerson?: 
   const { state: sharing, model: groups } = useSharingGroups();
   const inbox = useConversation(uid, undefined, focused);
   const activity = useGroupChatActivity(uid, sharing.groups, focused);
-  const { state: unread, model: unreadModel } = useUnreadChats();
+  const { state: unread, model: unreadModel } = useUnreadDirectory();
   const projectConversations = useMemo(() => createConversationProjection(), []);
   const rows = useMemo(
     () =>

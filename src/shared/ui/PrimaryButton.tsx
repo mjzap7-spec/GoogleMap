@@ -81,12 +81,17 @@ export function PrimaryButton({
           { opacity: busy ? 0.85 : disabled ? 0.5 : pressed ? 0.9 : 1 },
         ]}
       >
-        <View
-          accessibilityElementsHidden={busy}
-          importantForAccessibility={busy ? 'no-hide-descendants' : 'auto'}
-          style={[s.content, busy && { opacity: 0 }]}
-        >
-          {leadingIcon}
+        <View style={s.content}>
+          <View style={s.iconSlot}>
+            {busy ? (
+              <ActivityIndicator
+                size="small"
+                color={variant === 'primary' ? colors.buttonText : colors.accent}
+              />
+            ) : (
+              leadingIcon
+            )}
+          </View>
           <Text
             style={[
               ui.buttonText,
@@ -97,12 +102,8 @@ export function PrimaryButton({
           >
             {t(label)}
           </Text>
+          <View style={s.iconSlot} />
         </View>
-        {busy && (
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.loading]}>
-            <ActivityIndicator color={variant === 'primary' ? colors.buttonText : colors.accent} />
-          </View>
-        )}
       </Pressable>
     </Animated.View>
   );
@@ -115,5 +116,5 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
   },
-  loading: { alignItems: 'center', justifyContent: 'center' },
+  iconSlot: { width: 24, minHeight: 24, alignItems: 'center', justifyContent: 'center' },
 });

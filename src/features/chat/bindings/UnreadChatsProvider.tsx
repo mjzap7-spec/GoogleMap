@@ -36,6 +36,17 @@ export function useUnreadChatsModel() {
 type UnreadState = ReturnType<UnreadChatsViewModel['getSnapshot']>;
 const selectTotal = (state: UnreadState) => state.total;
 const selectCounts = (state: UnreadState) => state.counts;
+const selectDirectory = (state: UnreadState) => ({ counts: state.counts, failed: state.failed });
+const sameDirectory = (
+  a: ReturnType<typeof selectDirectory>,
+  b: ReturnType<typeof selectDirectory>,
+) => a.counts === b.counts && a.failed === b.failed;
+
+export function useUnreadDirectory() {
+  const model = useUnreadChatsModel();
+  const state = useViewModelSelection(model, selectDirectory, sameDirectory);
+  return { state, model };
+}
 
 export function useUnreadTotal() {
   return useViewModelSelection(useUnreadChatsModel(), selectTotal);

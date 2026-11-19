@@ -2,7 +2,7 @@ import React from 'react';
 import { AppToolbar } from '../../../shared/ui/AppToolbar';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
 import { useMapControls } from '../bindings/useMapControls';
-import { useUnreadChats } from '../../chat/bindings/UnreadChatsProvider';
+import { useUnreadTotal } from '../../chat/bindings/UnreadChatsProvider';
 export function MapToolbar({
   onMap,
   ...props
@@ -11,9 +11,7 @@ export function MapToolbar({
   'recording' | 'onToggleRecording' | 'recordingDisabled' | 'recordingHint' | 'unread'
 > & { onMap: boolean }) {
   const { state, commands } = useMapControls();
-  const {
-    state: { total },
-  } = useUnreadChats();
+  const total = useUnreadTotal();
   const { t } = useTranslation();
   return (
     <AppToolbar

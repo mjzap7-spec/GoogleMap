@@ -2,6 +2,8 @@
 
 An Expo / React Native app with a simple dark interface, Firebase authentication, profile registration, and MVVM architecture. Start with this file, then read [the architecture guide](docs/ARCHITECTURE.md) and [developer workflow](CONTRIBUTING.md).
 
+Private chats support [direct WebRTC file transfers up to 100 MB](docs/DIRECT_FILE_TRANSFERS.md), with Accept, progress, Cancel, and Save. This mode needs both people online and uses no paid relay or additional payment method.
+
 ## Run locally
 
 Use **Node.js 24 LTS**. Expo SDK 58 does not support Node 25.

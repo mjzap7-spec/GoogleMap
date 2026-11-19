@@ -1,6 +1,6 @@
 import { useMapViewModel } from '../../map/bindings/MapProvider';
 import { PrivateGroups } from './PrivateGroups';
-import { useUnreadChats } from '../../chat/bindings/UnreadChatsProvider';
+import { useUnreadCounts } from '../../chat/bindings/UnreadChatsProvider';
 import { useContactInterview } from '../../interviews/bindings/InterviewsProvider';
 import { usePersonChats } from '../../chat/bindings/usePersonChats';
 import { openPersonChat } from '../../chat/screens/openPersonChat';
@@ -20,9 +20,7 @@ export function ManageContactsScreen() {
   const sharing = useSharingGroups();
   const personChats = usePersonChats();
   const onCall = useContactInterview();
-  const {
-    state: { counts },
-  } = useUnreadChats();
+  const counts = useUnreadCounts();
   const transition = usePageTransition();
   const focused = useIsFocused();
   const active = useRef(focused);

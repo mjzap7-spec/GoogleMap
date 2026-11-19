@@ -2,7 +2,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { labelExpression } = require('../.test-build/features/map/models/map');
 const { MapViewModel } = require('../.test-build/features/map/viewmodels/MapViewModel');
-const { StoredMapPreferences } = require('../.test-build/features/map/data/StoredMapPreferences');
+const {
+  StoredMapPreferences,
+} = require('../.test-build/features/map/data/storage/StoredMapPreferences');
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 test('map language persists, ignores invalid values, and a late preference read cannot override a selection', async () => {
   let finish;

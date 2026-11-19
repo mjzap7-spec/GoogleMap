@@ -1,3 +1,4 @@
+import { directTransferId } from '../models/directTransfer';
 import React, { memo } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
@@ -7,6 +8,7 @@ import { ContactsIcon } from '../../../shared/ui/ContactsIcon';
 import { UnreadBadge, chatButtonLabel } from '../../../shared/ui/UnreadBadge';
 import { interviewInvitation } from '../../interviews/models/interview';
 import { CallIcon } from '../../interviews/views/CallIcon';
+import { parseAttachment } from '../models/attachments';
 import { selectConversation, type Conversation, type ChatSelection } from '../models/conversations';
 import { useChatPress, useChatProgress } from './chatMotion';
 
@@ -33,7 +35,11 @@ export const ConversationRow = memo(function ConversationRow({
   const member = 'memberId' in item.target;
   const room = 'groupId' in item.target && !member;
   const name = item.name || t('Group member');
-  const preview = item.preview?.text;
+  const preview =
+    item.preview?.text && directTransferId(item.preview.text)
+      ? t('File transfer invitation')
+      : item.preview?.text;
+  const file = preview ? parseAttachment(preview) : undefined;
   const callMode =
     preview === interviewInvitation.voice
       ? 'voice'
@@ -137,11 +143,13 @@ export const ConversationRow = memo(function ConversationRow({
                     !!unread && s.unreadPreview,
                   ]}
                 >
-                  {callMode
-                    ? t(callMode === 'voice' ? 'Voice call' : 'Video call')
-                    : preview === ''
-                      ? t('Message deleted')
-                      : (preview ?? t(room ? 'Group chat' : member ? 'Group member' : 'Contact'))}
+                  {file
+                    ? '↓ ' + file.name
+                    : callMode
+                      ? t(callMode === 'voice' ? 'Voice call' : 'Video call')
+                      : preview === ''
+                        ? t('Message deleted')
+                        : (preview ?? t(room ? 'Group chat' : member ? 'Group member' : 'Contact'))}
                 </Text>
               </View>
               <UnreadBadge count={unread} inline />

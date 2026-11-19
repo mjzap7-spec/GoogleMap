@@ -1,5 +1,31 @@
 # Architecture
 
+## Source organization
+
+`src/app` contains Expo Router entry points. `src/navigation` controls app navigation and account-scoped service lifetime. `src/application/createViewModels.ts` defines the injected service contracts and constructs ViewModels across features. `src/bootstrap/createAppDependencies.ts` selects Firebase, HTTP, storage, and device implementations.
+
+Each feature keeps its `models`, `viewmodels`, `bindings`, `screens`, and `views`. Data adapters are grouped by responsibility when present.
+
+| Data folder | Responsibility |
+| --- | --- |
+| `firebase` | Firebase repositories, SDK mapping, and server clock synchronization |
+| `http` | Cloudinary uploads and Open-Meteo city requests |
+| `storage` | Device-local profile cache, chat history preferences, and map preferences |
+| `device` | Location tracker, photo picker, native/browser call adapters, and chat visibility decorator |
+| `webrtc` | Peer connection transport and call ICE credential requests |
+
+Native and browser versions of a module stay beside each other, with the platform suffix preserved. Import their common module path so Metro chooses the platform implementation. Shared strings live in `src/shared/resources`, platform integrations in `src/shared/platform`, visual controls in `src/shared/ui`, and motion in `src/shared/motion`.
+
+The old authentication dependency module forwards its existing exports to the application factory. Existing providers and injected test services can continue using that interface. Application factories have the same enforced dependency boundaries as the feature ViewModel composition code.
+
+## Application text resources
+
+All translated application phrases live in `src/shared/resources/strings.ts`. This is the text resource entry point for labels, buttons, errors, call screens, chat actions, and help copy. The English phrase is the lookup key. Each value contains Spanish, French, German, Chinese, and Japanese translations in that order. The labelled tuple type checks that every phrase provides all five translations.
+
+Use `useTranslation()` in a React view and render `t('Save profile')`. For dynamic values, use a placeholder such as `t('Show {name} on map', { name })` and preserve the placeholder in every translation. User messages, names, emails, and backend identifiers remain data supplied by their owning models.
+
+To change application copy, find its English key in the resource file and update the translations together. If the English phrase changes, update its callers too. Runtime translation and language preferences live in `src/shared/i18n`. The `catalog.ts` module forwards the central resource for existing consumers.
+
 ## Reading order
 
 Start with `src/app/sign-in.tsx`, then follow `screens/AuthScreen.tsx` → `bindings/useAuthForm.ts` → `viewmodels/AuthFormViewModel.ts` → `models/auth.ts` → `data/FirebaseAuthRepository.ts`. This traces one interaction from the route to the backend contract without jumping between unrelated features.
@@ -41,7 +67,7 @@ flowchart TD
 
 `ObservableViewModel` exposes stable `subscribe` and `getSnapshot` functions. Bindings use `useSyncExternalStore` to observe those snapshots. The form binding projects only the public command surface; views do not receive the ViewModel instance or its repository.
 
-For frequently changing state, `useViewModelSelection` subscribes to only the fields a screen needs. Its framework-independent `selectSnapshot` helper preserves selection identity when unrelated fields change. Keep selectors and equality functions stable, and include every field the consumer reads. Chat lists use `useSharingGroups`; toolbar controls use `useMapControls`, so GPS fixes do not re-render those surfaces. Membership, error, and recording changes still propagate immediately.
+For frequently changing state, `useViewModelSelection` subscribes to only the fields a screen needs. Its framework-independent `selectSnapshot` helper preserves selection identity when unrelated fields change. Keep selectors and equality functions stable, and include every field the consumer reads. Chat lists use `useSharingGroups`; toolbar controls use `useMapControls`, so GPS fixes do not re-render those surfaces. Membership, error, and recording changes still propagate immediately. The chat directory binding composes contact, group, and unread snapshots into the conversation projection. The transcript receives the unread model for read commands without subscribing to badge counts, and the map toolbar observes only the total.
 
 Dependency direction is enforced by `eslint.config.js`, including restrictions for Models, ViewModels, Views, bindings, adapters, shared code, and route containers. Type-only imports of state/command contracts from ViewModels are allowed in Views.
 

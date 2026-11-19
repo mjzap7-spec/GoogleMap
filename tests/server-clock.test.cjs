@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { ServerClock } = require('../.test-build/features/contacts/data/ServerClock');
+const { ServerClock } = require('../.test-build/features/contacts/data/firebase/ServerClock');
 
 test('server clock corrects large positive and negative device offsets and converts leases back to local deadlines', async () => {
   const server = Date.UTC(2026, 10, 3, 14);

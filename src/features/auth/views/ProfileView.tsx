@@ -103,11 +103,19 @@ export function ProfileView({
               disabled={disabled}
               style={({ pressed }) => [
                 styles.suggestion,
+                disabled && styles.suggestionDisabled,
                 pressed && { backgroundColor: colors.border },
               ]}
             >
-              <Text style={styles.city}>{city.name}</Text>
-              <Text style={ui.muted}>{[city.state, city.country].filter(Boolean).join(', ')}</Text>
+              <View accessible={false} style={styles.locationIcon}>
+                <View style={styles.locationDot} />
+              </View>
+              <View style={styles.cityDetails}>
+                <Text style={styles.city}>{city.name}</Text>
+                <Text style={ui.muted}>
+                  {[...new Set([city.state, city.country].filter(Boolean))].join(', ')}
+                </Text>
+              </View>
             </Pressable>
           ))}
           <CityAttribution />
@@ -203,7 +211,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     backgroundColor: colors.input,
-    gap: 4,
+    gap: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cityDetails: { flex: 1, minWidth: 0, gap: 4 },
+  suggestionDisabled: { opacity: 0.5 },
+  locationIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#BCB5FF18',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locationDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: colors.accent,
   },
   city: { color: colors.text, fontSize: 16 },
   hint: { color: colors.muted, lineHeight: 21, marginBottom: 16 },

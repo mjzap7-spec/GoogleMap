@@ -4,11 +4,12 @@ const Module = require('node:module');
 
 function fixture() {
   const subscriptions = [];
-  const filename = require.resolve('../.test-build/features/chat/data/FirebaseChatRepository');
+  const filename =
+    require.resolve('../.test-build/features/chat/data/firebase/FirebaseChatRepository');
   delete require.cache[filename];
   const original = Module._load;
   Module._load = function (request, ...args) {
-    if (request === '../../../config/firebase/client') return {};
+    if (request === '../../../../config/firebase/client') return {};
     if (request === 'firebase/firestore')
       return {
         collection: (_db, ...path) => path.join('/'),

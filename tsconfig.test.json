@@ -13,7 +13,7 @@
   "include": [
     "src/features/interviews/models/**/*.ts",
     "src/features/interviews/viewmodels/**/*.ts",
-    "src/features/interviews/data/PeerCallMedia.ts",
+    "src/features/interviews/data/webrtc/PeerCallMedia.ts",
     "src/features/chat/data/**/*.ts",
     "src/features/chat/models/**/*.ts",
     "src/features/help/models/**/*.ts",
@@ -28,10 +28,10 @@
     "src/shared/mvvm/**/*.ts",
     "src/features/auth/models/**/*.ts",
     "src/features/auth/viewmodels/**/*.ts",
-    "src/features/auth/data/FirebaseAuthRepository.ts",
-    "src/features/auth/data/StoredProfileCache.ts",
-    "src/features/auth/data/OpenMeteoCityRepository.ts",
-    "src/features/auth/data/CloudinaryAvatarStorage.ts",
+    "src/features/auth/data/firebase/FirebaseAuthRepository.ts",
+    "src/features/auth/data/storage/StoredProfileCache.ts",
+    "src/features/auth/data/http/OpenMeteoCityRepository.ts",
+    "src/features/auth/data/http/CloudinaryAvatarStorage.ts",
     "src/features/auth/bindings/dependencies.ts",
     "src/shared/utils/dateOnly.ts",
     "src/shared/i18n/**/*.ts"

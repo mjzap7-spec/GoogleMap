@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   OpenMeteoCityRepository,
-} = require('../.test-build/features/auth/data/OpenMeteoCityRepository');
+} = require('../.test-build/features/auth/data/http/OpenMeteoCityRepository');
 const { ProfileViewModel } = require('../.test-build/features/auth/viewmodels/ProfileViewModel');
 
 const result = {
@@ -60,6 +60,44 @@ test('city cache has a fixed limit and evicts the least recently used query', as
   assert.equal(calls, 33);
   await cities.search('city-1');
   assert.equal(calls, 34);
+});
+
+test('concurrent city lookups share a request and empty results are cached', async () => {
+  let calls = 0;
+  let complete;
+  const response = new Promise((resolve) => {
+    complete = resolve;
+  });
+  const cities = new OpenMeteoCityRepository(async () => {
+    calls++;
+    return response;
+  });
+  const first = cities.search('unknown');
+  const second = cities.search(' UNKNOWN ');
+  complete({ ok: true, json: async () => ({ generationtime_ms: 1 }) });
+  assert.deepEqual(await first, []);
+  assert.deepEqual(await second, []);
+  assert.deepEqual(await cities.search('unknown'), []);
+  assert.equal(calls, 1);
+});
+
+test('cancelling one city lookup does not cancel another caller', async () => {
+  const requests = [];
+  const cities = new OpenMeteoCityRepository(
+    (_url, options) =>
+      new Promise((resolve, reject) => {
+        options.signal?.addEventListener('abort', () => reject(Error('cancelled')));
+        requests.push(resolve);
+      }),
+  );
+  const controller = new AbortController();
+  const first = cities.search('Orlando', controller.signal);
+  const cancelled = assert.rejects(first);
+  const second = cities.search('Orlando');
+  controller.abort();
+  requests[1]({ ok: true, json: async () => result });
+  await cancelled;
+  assert.equal((await second)[0].name, 'Orlando');
 });
 
 test('unchanged profiles skip backend writes; an edit saves once, then skips again', async () => {

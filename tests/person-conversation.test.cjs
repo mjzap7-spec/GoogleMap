@@ -153,3 +153,26 @@ test('background activity releases listeners, retains previews, and refreshes me
   );
   model.stop();
 });
+
+test('repeated group rosters preserve the snapshot while avatar and name changes update it', () => {
+  let roster;
+  const model = new GroupChatActivityViewModel(
+    {
+      members: (_uid, _groupId, next) => {
+        roster = next;
+        return () => {};
+      },
+      messages: () => () => {},
+    },
+    'me',
+  );
+  model.sync([family]);
+  roster([{ id: 'bob', name: 'Bob', avatarUrl: null }]);
+  const original = model.getSnapshot();
+  roster([{ id: 'bob', name: 'Bob', avatarUrl: null }]);
+  assert.equal(model.getSnapshot(), original);
+  roster([{ id: 'bob', name: 'Robert', avatarUrl: 'https://example.com/avatar.jpg' }]);
+  assert.notEqual(model.getSnapshot(), original);
+  assert.equal(model.getSnapshot().entries.get('roster:' + family.id).cards[0].name, 'Robert');
+  model.stop();
+});

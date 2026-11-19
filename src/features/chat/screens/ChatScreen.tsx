@@ -1,7 +1,15 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { BackHandler, Keyboard, useWindowDimensions } from 'react-native';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useSession } from '../../auth/bindings/useSession';
+import { useAuthDependencies } from '../../auth/bindings/AuthProvider';
 import { resolveConversation, memberKey, type ChatSelection } from '../models/conversations';
 import { useConversation } from '../bindings/useConversation';
 import { useConversationRead } from '../bindings/useConversationRead';
@@ -27,11 +35,42 @@ const Thread = memo(function Thread({
   optionsRequest: number;
 }) {
   const { state, commands } = useConversation(uid, peer, focused);
+  const { createAttachments, createDirectTransfers } = useAuthDependencies();
+  const files = useMemo(() => createAttachments(uid, peer), [createAttachments, uid, peer]);
+  const fileState = useSyncExternalStore(files.subscribe, files.getSnapshot, files.getSnapshot);
+  useEffect(() => files.stop, [files]);
+  const direct = useMemo(
+    () => createDirectTransfers(uid, peer),
+    [createDirectTransfers, uid, peer],
+  );
+  const directState = useSyncExternalStore(
+    direct.subscribe,
+    direct.getSnapshot,
+    direct.getSnapshot,
+  );
+  useEffect(() => {
+    if (focused) direct.sync(state.messages);
+    else direct.stop();
+  }, [direct, state.messages, focused]);
+  useEffect(() => direct.stop, [direct]);
+  const directActions = useMemo(
+    () => ({
+      state: directState,
+      send: direct.send,
+      accept: direct.accept,
+      cancel: direct.cancel,
+      save: direct.save,
+    }),
+    [directState, direct],
+  );
   const model = useUnreadChatsModel();
   const { watchHistory } = useInterviewModel();
   const onRead = useConversationRead(peer, focused, model, commands.markVisibleRead);
   return (
     <MessagePane
+      direct={'senderName' in peer ? undefined : directActions}
+      fileState={fileState}
+      onDownload={files.download}
       watchCall={watchHistory}
       uid={uid}
       peerName={peerName}

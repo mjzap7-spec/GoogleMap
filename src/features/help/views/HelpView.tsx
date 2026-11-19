@@ -15,9 +15,10 @@ import {
   StyleSheet,
   Text,
   View,
-  type LayoutChangeEvent,
   type ScrollViewInstance,
 } from 'react-native';
+import { PhoneIcon } from '../../interviews/views/CallIcon';
+import { ChatIcon, InboxIcon } from '../../../shared/ui/ChatIcon';
 import { ScreenHeader } from '../../../shared/ui/ScreenHeader';
 import { SearchField } from '../../../shared/ui/SearchField';
 import { useTranslation } from '../../../shared/i18n/LanguageProvider';
@@ -25,20 +26,49 @@ import { useReducedMotion } from '../../../shared/motion/useReducedMotion';
 import { colors } from '../../../shared/theme/colors';
 
 import { topics } from '../models/helpTopics';
+
+const pinStyles = StyleSheet.create({
+  pin: {
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    borderBottomRightRadius: 2,
+    borderWidth: 2,
+    borderColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '45deg' }],
+  },
+  pinCenter: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accent },
+});
+
+const shortcuts = [
+  { title: 'Chats', icon: <ChatIcon unread={0} /> },
+  { title: 'Unread messages', icon: <InboxIcon /> },
+  { title: 'Interview calls', icon: <PhoneIcon /> },
+  {
+    title: 'Location sharing',
+    icon: (
+      <View style={pinStyles.pin}>
+        <View style={pinStyles.pinCenter} />
+      </View>
+    ),
+  },
+] as const;
 const Topic = memo(function Topic({
   id,
   title,
   body,
   open,
   onPress,
-  onLayout,
+  onPosition,
 }: {
   id: string;
   title: string;
   body: string;
   open: boolean;
   onPress: (id: string) => void;
-  onLayout?: (event: LayoutChangeEvent) => void;
+  onPosition?: (id: string, y: number) => void;
 }) {
   const [measuredHeight, setMeasuredHeight] = useState(0);
   const [height] = useState(() => new Animated.Value(0));
@@ -62,15 +92,20 @@ const Topic = memo(function Topic({
     return () => animation.stop();
   }, [open, measuredHeight, height, reducedMotion]);
   return (
-    <View onLayout={onLayout} style={[styles.card, open && styles.openCard]}>
+    <View
+      onLayout={onPosition ? (event) => onPosition(id, event.nativeEvent.layout.y) : undefined}
+      style={[styles.card, open && styles.openCard]}
+    >
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         onPress={() => onPress(id)}
-        style={({ pressed }) => [styles.topicHeader, pressed && { opacity: 0.7 }]}
+        style={({ pressed }) => [styles.topicHeader, pressed && styles.pressed]}
       >
         <Text style={styles.heading}>{title}</Text>
-        <Text style={styles.chevron}>{open ? '−' : '+'}</Text>
+        <View accessible={false} style={[styles.disclosure, open && styles.openDisclosure]}>
+          <View style={[styles.chevron, open && styles.openChevron]} />
+        </View>
       </Pressable>
       <Animated.View
         accessibilityElementsHidden={!open}
@@ -90,42 +125,32 @@ const Topic = memo(function Topic({
 });
 export function HelpView({ onBack, topic }: { onBack: () => void; topic?: string }) {
   const { t } = useTranslation();
+  const reducedMotion = useReducedMotion();
   const [query, setQuery] = useState('');
-  const [collapsedMatches, setCollapsedMatches] = useState<string[]>([]);
+  const [searchExpanded, setSearchExpanded] = useState<string | null>();
   const search = useDeferredValue(query.trim().toLocaleLowerCase());
   const initial = topics.find(([title]) => title === topic)?.[0] ?? topics[0][0];
   const [expanded, setExpanded] = useState<string | null>(initial);
   const scroll = useRef<ScrollViewInstance>(null);
-  const revealOnOpen = useRef(Boolean(topic));
-  const initialY = useRef<number | null>(null);
+  const pendingTopic = useRef(topic ? initial : undefined);
+  const positions = useRef(new Map<string, number>());
   const reveal = useCallback(() => {
-    if (revealOnOpen.current && initialY.current !== null) {
-      scroll.current?.scrollTo({ y: Math.max(0, initialY.current - 4), animated: false });
-    }
+    const id = pendingTopic.current;
+    const y = id ? positions.current.get(id) : undefined;
+    if (y === undefined || !scroll.current) return;
+    pendingTopic.current = undefined;
+    scroll.current.scrollTo({ y: Math.max(0, y - 4), animated: false });
   }, []);
-  const measureInitial = useCallback(
-    (event: LayoutChangeEvent) => {
-      initialY.current = event.nativeEvent.layout.y;
-      reveal();
+  const recordPosition = useCallback(
+    (id: string, y: number) => {
+      positions.current.set(id, y);
+      if (pendingTopic.current === id) reveal();
     },
     [reveal],
   );
   const takeControl = useCallback(() => {
-    revealOnOpen.current = false;
+    pendingTopic.current = undefined;
   }, []);
-  const toggle = useCallback(
-    (id: string) => {
-      takeControl();
-      if (search) {
-        setCollapsedMatches((current) =>
-          current.includes(id) ? current.filter((title) => title !== id) : [...current, id],
-        );
-      } else {
-        setExpanded((current) => (current === id ? null : id));
-      }
-    },
-    [takeControl, search],
-  );
   const translatedTopics = useMemo(
     () =>
       topics.map(([title, body]) => ({
@@ -140,6 +165,20 @@ export function HelpView({ onBack, topic }: { onBack: () => void; topic?: string
     () => translatedTopics.filter((item) => item.search.includes(search)),
     [translatedTopics, search],
   );
+  const singleResult = search && filtered.length === 1 ? filtered[0].id : undefined;
+  const toggle = useCallback(
+    (id: string) => {
+      takeControl();
+      if (search) {
+        setSearchExpanded((current) =>
+          (current === undefined ? singleResult : current) === id ? null : id,
+        );
+      } else {
+        setExpanded((current) => (current === id ? null : id));
+      }
+    },
+    [takeControl, search, singleResult],
+  );
   return (
     <View style={styles.screen}>
       <ScreenHeader title={t('Help')} onBack={onBack} />
@@ -150,7 +189,7 @@ export function HelpView({ onBack, topic }: { onBack: () => void; topic?: string
           value={query}
           onChangeText={(text) => {
             setQuery(text);
-            setCollapsedMatches([]);
+            setSearchExpanded(undefined);
             scroll.current?.scrollTo({ y: 0, animated: false });
           }}
           onFocus={takeControl}
@@ -168,21 +207,60 @@ export function HelpView({ onBack, topic }: { onBack: () => void; topic?: string
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
+        {!search && (
+          <View style={styles.shortcuts}>
+            {shortcuts.map(({ title: id, icon }) => (
+              <Pressable
+                key={id}
+                accessibilityRole="button"
+                onPress={() => {
+                  takeControl();
+                  setExpanded(id);
+                  const y = positions.current.get(id);
+                  if (y !== undefined)
+                    scroll.current?.scrollTo({
+                      y: Math.max(0, y - 4),
+                      animated: reducedMotion === false,
+                    });
+                }}
+                style={({ pressed }) => [styles.shortcut, pressed && styles.pressed]}
+              >
+                <View accessible={false} style={styles.shortcutIcon}>
+                  {icon}
+                </View>
+                <Text style={styles.shortcutText}>{t(id)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
         {filtered.map(({ id, title, body }) => (
           <Topic
             key={id}
             id={id}
             title={title}
             body={body}
-            open={search ? !collapsedMatches.includes(id) : expanded === id}
-            onLayout={id === initial ? measureInitial : undefined}
+            open={
+              search
+                ? searchExpanded === id || (searchExpanded === undefined && singleResult === id)
+                : expanded === id
+            }
+            onPosition={search ? undefined : recordPosition}
             onPress={toggle}
           />
         ))}
         {!filtered.length && (
-          <Text style={styles.body}>
-            {t('No matching help topics. Try location, contacts, or trips.')}
-          </Text>
+          <View style={styles.empty}>
+            <Text style={styles.body}>
+              {t('No matching help topics. Try location, contacts, or trips.')}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setQuery('')}
+              style={styles.clearSearch}
+            >
+              <Text style={styles.shortcutText}>{t('Clear search')}</Text>
+            </Pressable>
+          </View>
         )}
       </ScrollView>
     </View>
@@ -207,17 +285,83 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     alignSelf: 'center',
   },
-  openCard: { borderColor: '#BCB5FF80' },
+  shortcuts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  shortcut: {
+    flexBasis: '45%',
+    flexGrow: 1,
+    minHeight: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 8,
+    backgroundColor: '#BCB5FF14',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#BCB5FF2D',
+  },
+  shortcutIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#BCB5FF19',
+    flexShrink: 0,
+  },
+  shortcutText: { color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1 },
+  clearSearch: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#BCB5FF22',
+  },
+  pressed: { backgroundColor: '#BCB5FF30' },
+  empty: { backgroundColor: colors.input, borderRadius: 18, padding: 16, gap: 12 },
+  openCard: { borderColor: '#BCB5FF80', backgroundColor: '#1C1D29' },
   card: {
-    paddingHorizontal: 16,
     borderRadius: 18,
     backgroundColor: colors.input,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  topicHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 56, gap: 12 },
+  topicHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 60,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 17,
+  },
   heading: { color: colors.text, fontSize: 15, fontWeight: '600', flex: 1 },
-  chevron: { color: colors.accent, fontSize: 22 },
-  answer: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 16 },
-  body: { color: colors.muted, fontSize: 13, lineHeight: 21 },
+  disclosure: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#BCB5FF0D',
+  },
+  openDisclosure: { backgroundColor: '#BCB5FF24' },
+  chevron: {
+    width: 8,
+    height: 8,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: colors.accent,
+    transform: [{ rotate: '45deg' }],
+    marginTop: -3,
+  },
+  openChevron: { transform: [{ rotate: '225deg' }], marginTop: 3 },
+  answer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 18,
+  },
+  body: { color: colors.muted, fontSize: 14, lineHeight: 22 },
 });

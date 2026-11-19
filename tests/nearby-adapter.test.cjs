@@ -17,11 +17,11 @@ async function fixture(t, offset = 0, tokenRefresh) {
     },
   };
   const filename =
-    require.resolve('../.test-build/features/contacts/data/FirebaseContactRepository');
+    require.resolve('../.test-build/features/contacts/data/firebase/FirebaseContactRepository');
   delete require.cache[filename];
   const original = Module._load;
   Module._load = function (request, ...args) {
-    if (request === '../../../config/firebase/client')
+    if (request === '../../../../config/firebase/client')
       return { getFirebaseAuth: () => auth, getFirebaseApp: () => ({}) };
     if (request === 'geofire-common')
       return {

@@ -31,6 +31,127 @@ const {
 } = require('firebase/firestore');
 const { geohashForLocation } = require('geofire-common');
 const projectId = 'demo-google-map-social';
+function fileTransferData(patch = {}) {
+  return {
+    fromId: 'alice',
+    toId: 'bob',
+    name: 'large-video.mp4',
+    size: 50 * 1024 * 1024,
+    mime: 'video/mp4',
+    kind: 'contact',
+    contextId: 'alice_bob',
+    status: 'offered',
+    offer: { type: 'offer', sdp: 'offer' },
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(Date.now() + 1800000),
+    ...patch,
+  };
+}
+test('direct file signaling is private, size bounded, and restricted to accepted contacts', async () => {
+  const ref = doc(db('alice'), 'fileTransfers', 'f');
+  await assertFails(setDoc(ref, fileTransferData()));
+  await request();
+  await accept();
+  await assertFails(setDoc(ref, fileTransferData({ size: 104857601 })));
+  await assertFails(setDoc(ref, fileTransferData({ size: 0 })));
+  await assertFails(setDoc(ref, fileTransferData({ fromId: 'bob' })));
+  await assertFails(
+    setDoc(ref, fileTransferData({ expiresAt: Timestamp.fromMillis(Date.now() + 3600000) })),
+  );
+  await assertSucceeds(setDoc(ref, fileTransferData()));
+  await assertSucceeds(getDoc(doc(db('bob'), 'fileTransfers', 'f')));
+  await assertFails(getDoc(doc(db('eve'), 'fileTransfers', 'f')));
+  await assertFails(getDocs(collection(db('eve'), 'fileTransfers')));
+});
+test('file accept, decline, and completion cannot be forged by another participant', async () => {
+  await request();
+  await accept();
+  await setDoc(doc(db('alice'), 'fileTransfers', 'f'), fileTransferData());
+  const alice = doc(db('alice'), 'fileTransfers', 'f'),
+    bob = doc(db('bob'), 'fileTransfers', 'f');
+  const answer = { status: 'accepted', answer: { type: 'answer', sdp: 'answer' } };
+  await assertFails(updateDoc(alice, answer));
+  await assertFails(updateDoc(bob, { ...answer, size: 1 }));
+  await assertSucceeds(updateDoc(bob, answer));
+  await assertFails(updateDoc(bob, answer));
+  await assertFails(updateDoc(bob, { status: 'completed', endedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(alice, { status: 'completed', endedAt: serverTimestamp() }));
+  await assertFails(updateDoc(alice, { status: 'offered' }));
+  await setDoc(doc(db('alice'), 'fileTransfers', 'decline'), fileTransferData());
+  await assertFails(
+    updateDoc(doc(db('alice'), 'fileTransfers', 'decline'), {
+      status: 'declined',
+      endedAt: serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(db('bob'), 'fileTransfers', 'decline'), {
+      status: 'declined',
+      endedAt: serverTimestamp(),
+    }),
+  );
+});
+test('file candidates are immutable, bounded, private and stop after cancellation', async () => {
+  await request();
+  await accept();
+  await setDoc(doc(db('alice'), 'fileTransfers', 'f'), fileTransferData());
+  const candidate = {
+    fromId: 'alice',
+    index: 0,
+    candidate: 'candidate:1',
+    sdpMid: '0',
+    sdpMLineIndex: 0,
+  };
+  const ref = doc(db('alice'), 'fileTransfers', 'f', 'candidates', 'alice_0');
+  await assertSucceeds(setDoc(ref, candidate));
+  await assertFails(updateDoc(ref, { candidate: 'replace' }));
+  await assertFails(
+    setDoc(doc(db('alice'), 'fileTransfers', 'f', 'candidates', 'alice_64'), {
+      ...candidate,
+      index: 64,
+    }),
+  );
+  await assertFails(getDoc(doc(db('eve'), 'fileTransfers', 'f', 'candidates', 'alice_0')));
+  await assertSucceeds(
+    getDocs(
+      query(
+        collection(db('bob'), 'fileTransfers', 'f', 'candidates'),
+        where('fromId', '==', 'alice'),
+        limit(64),
+      ),
+    ),
+  );
+  await updateDoc(doc(db('bob'), 'fileTransfers', 'f'), {
+    status: 'cancelled',
+    endedAt: serverTimestamp(),
+  });
+  await assertFails(
+    setDoc(doc(db('alice'), 'fileTransfers', 'f', 'candidates', 'alice_1'), {
+      ...candidate,
+      index: 1,
+    }),
+  );
+});
+test('departed group members cannot accept a direct file invitation', async () => {
+  await env.withSecurityRulesDisabled((c) =>
+    setDoc(doc(c.firestore(), 'privateGroups', 'g'), { joinedIds: ['alice', 'bob'] }),
+  );
+  await assertSucceeds(
+    setDoc(
+      doc(db('alice'), 'fileTransfers', 'f'),
+      fileTransferData({ kind: 'group', contextId: 'g' }),
+    ),
+  );
+  await env.withSecurityRulesDisabled((c) =>
+    updateDoc(doc(c.firestore(), 'privateGroups', 'g'), { joinedIds: ['alice'] }),
+  );
+  await assertFails(
+    updateDoc(doc(db('bob'), 'fileTransfers', 'f'), {
+      status: 'accepted',
+      answer: { type: 'answer', sdp: 'answer' },
+    }),
+  );
+});
 let env;
 function db(uid) {
   return env
@@ -409,7 +530,7 @@ test('contact list avatars update without reopening Contacts', { timeout: 20000 
   t.mock.method(client, 'getFirebaseAuth', () => ({ currentUser: { uid: 'alice' } }));
   const {
     FirebaseContactRepository,
-  } = require('../../.test-build/features/contacts/data/FirebaseContactRepository');
+  } = require('../../.test-build/features/contacts/data/firebase/FirebaseContactRepository');
   const repo = new FirebaseContactRepository();
   t.mock.method(repo, 'database', () => alice);
   const avatarUrl = 'https://example.com/new-avatar.png';
@@ -446,7 +567,7 @@ test(
     t.mock.method(client, 'getFirebaseAuth', () => ({ currentUser: { uid: 'alice' } }));
     const {
       FirebaseContactRepository,
-    } = require('../../.test-build/features/contacts/data/FirebaseContactRepository');
+    } = require('../../.test-build/features/contacts/data/firebase/FirebaseContactRepository');
     const repo = new FirebaseContactRepository();
     t.mock.method(repo, 'database', () => alice);
     let stop;
@@ -500,11 +621,13 @@ test(
   async (t) => {
     const {
       FirebaseChatRepository,
-    } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+    } = require('../../.test-build/features/chat/data/firebase/FirebaseChatRepository');
     const {
       DeviceChatRepository,
-    } = require('../../.test-build/features/chat/data/DeviceChatRepository');
-    const { StoredChatHistory } = require('../../.test-build/features/chat/data/StoredChatHistory');
+    } = require('../../.test-build/features/chat/data/device/DeviceChatRepository');
+    const {
+      StoredChatHistory,
+    } = require('../../.test-build/features/chat/data/storage/StoredChatHistory');
     const { ChatViewModel } = require('../../.test-build/features/chat/viewmodels/ChatViewModel');
     const { threadKey } = require('../../.test-build/features/chat/models/chat');
     await request();
@@ -664,7 +787,7 @@ test(
   async (t) => {
     const {
       FirebaseChatRepository,
-    } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+    } = require('../../.test-build/features/chat/data/firebase/FirebaseChatRepository');
     const { ChatViewModel } = require('../../.test-build/features/chat/viewmodels/ChatViewModel');
     await request();
     await accept();
@@ -810,7 +933,7 @@ test(
   async (t) => {
     const {
       FirebaseChatRepository,
-    } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+    } = require('../../.test-build/features/chat/data/firebase/FirebaseChatRepository');
     const { ChatViewModel } = require('../../.test-build/features/chat/viewmodels/ChatViewModel');
     const { messageStatus } = require('../../.test-build/features/chat/models/messageStatus');
     const alice = db('alice'),
@@ -921,7 +1044,7 @@ test(
   async (t) => {
     const {
       FirebaseChatRepository,
-    } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+    } = require('../../.test-build/features/chat/data/firebase/FirebaseChatRepository');
     const {
       UnreadChatsViewModel,
     } = require('../../.test-build/features/chat/viewmodels/UnreadChatsViewModel');
@@ -1000,7 +1123,7 @@ test(
 test('a large unread backlog caps the badge and reading older messages leaves newer arrivals unread', async (t) => {
   const {
     FirebaseChatRepository,
-  } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+  } = require('../../.test-build/features/chat/data/firebase/FirebaseChatRepository');
   const {
     UnreadChatsViewModel,
   } = require('../../.test-build/features/chat/viewmodels/UnreadChatsViewModel');
@@ -1034,7 +1157,7 @@ test('a large unread backlog caps the badge and reading older messages leaves ne
 test('accepted contacts exchange live messages with private inbox previews; outsiders and forged senders are rejected', async () => {
   const {
     FirebaseChatRepository,
-  } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+  } = require('../../.test-build/features/chat/data/firebase/FirebaseChatRepository');
   const { ChatViewModel } = require('../../.test-build/features/chat/viewmodels/ChatViewModel');
   const alice = db('alice'),
     bob = db('bob'),
@@ -1362,7 +1485,7 @@ function createListedGroup(database, id, name) {
 test('directory discovery, uninvited join, live group messages, leave and rejoin', async () => {
   const {
     FirebaseChatRepository,
-  } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+  } = require('../../.test-build/features/chat/data/firebase/FirebaseChatRepository');
   const alice = db('alice'),
     bob = db('bob'),
     eve = db('eve'),
@@ -1445,12 +1568,56 @@ test('directory discovery, uninvited join, live group messages, leave and rejoin
   }
 });
 test(
+  'a joined member receives a new group avatar without reopening chat',
+  { timeout: 20000 },
+  async (t) => {
+    const {
+      FirebaseSharingRepository,
+    } = require('../../.test-build/features/contacts/data/firebase/FirebaseSharingRepository');
+    const {
+      FirebaseChatRepository,
+    } = require('../../.test-build/features/chat/data/firebase/FirebaseChatRepository');
+    const id = 'avatar-group';
+    const alice = db('alice');
+    const bob = db('bob');
+    const groups = new FirebaseSharingRepository();
+    const chat = new FirebaseChatRepository(() => alice);
+    t.mock.method(groups, 'database', () => bob);
+    await createListedGroup(alice, id, 'Avatar group');
+    await groups.join({ id: 'bob', fullName: 'Bob', avatarUrl: null }, { id });
+    const avatarUrl = 'https://example.com/bob-updated.png';
+    let updating = false;
+    const avatar = await new Promise((resolve, reject) => {
+      t.after(
+        chat.members(
+          'alice',
+          id,
+          (cards) => {
+            const member = cards.find((card) => card.id === 'bob');
+            if (!member) return;
+            if (member.avatarUrl === avatarUrl) resolve(member.avatarUrl);
+            if (updating) return;
+            updating = true;
+            void updateDoc(doc(bob, 'users', 'bob'), { avatarUrl })
+              .then(() => groups.updateMemberProfile({ id: 'bob', fullName: 'Bob', avatarUrl }, id))
+              .catch(reject);
+          },
+          reject,
+        ),
+      );
+    });
+    assert.equal(avatar, avatarUrl);
+    await assertFails(getDoc(doc(alice, 'users', 'bob')));
+  },
+);
+
+test(
   'all joined members see group chat and roster; only a pair can exchange its group-private messages',
   { timeout: 25000 },
   async () => {
     const {
       FirebaseChatRepository,
-    } = require('../../.test-build/features/chat/data/FirebaseChatRepository');
+    } = require('../../.test-build/features/chat/data/firebase/FirebaseChatRepository');
     const id = 'three-people';
     const alice = db('alice'),
       bob = db('bob'),
@@ -1642,7 +1809,7 @@ test('sharing preferences disable nearby publishing and require opt-in for ordin
   const database = db('alice');
   const {
     FirebaseSharingRepository,
-  } = require('../../.test-build/features/contacts/data/FirebaseSharingRepository');
+  } = require('../../.test-build/features/contacts/data/firebase/FirebaseSharingRepository');
   const repository = new FirebaseSharingRepository();
   t.mock.method(repository, 'database', () => database);
   const prefs = doc(database, 'users', 'alice', 'preferences', 'sharing');
@@ -1692,7 +1859,7 @@ test(
   async (t) => {
     const {
       FirebaseSharingRepository,
-    } = require('../../.test-build/features/contacts/data/FirebaseSharingRepository');
+    } = require('../../.test-build/features/contacts/data/firebase/FirebaseSharingRepository');
     const owner = db('alice'),
       member = db('bob'),
       outside = db('eve');
@@ -1809,7 +1976,7 @@ test(
   async (t) => {
     const {
       FirebaseSharingRepository,
-    } = require('../../.test-build/features/contacts/data/FirebaseSharingRepository');
+    } = require('../../.test-build/features/contacts/data/firebase/FirebaseSharingRepository');
     const {
       SharingViewModel,
     } = require('../../.test-build/features/contacts/viewmodels/SharingViewModel');
