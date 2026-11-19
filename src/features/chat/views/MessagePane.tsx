@@ -212,9 +212,11 @@ export function MessagePane({
         />
       )}
       {!!direct?.state.error && (
-        <Text accessibilityRole="alert" style={s.error}>
-          {t(direct.state.error)}
-        </Text>
+        <View style={s.errorRow}>
+          <Text accessibilityRole="alert" style={[s.error, { flex: 0 }]}>
+            {t(direct.state.error)}
+          </Text>
+        </View>
       )}
       {direct?.state.busy && !direct.state.active && (
         <View style={s.errorRow}>

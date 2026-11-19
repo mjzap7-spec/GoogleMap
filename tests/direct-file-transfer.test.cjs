@@ -10,6 +10,10 @@ const {
   DIRECT_FILE_PREFIX,
 } = require('../.test-build/features/chat/models/directTransfer');
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+const {
+  fileDescription,
+  fileTransferError,
+} = require('../.test-build/features/chat/models/fileSignaling');
 const id = 'abcdefghijklmnopqrst';
 const record = {
   id,
@@ -66,7 +70,15 @@ function rtc() {
       return { type: 'answer', sdp: 'answer' };
     }
     async setLocalDescription(value) {
-      this.localDescription = value;
+      // Reproduce the native runtime: description getters on a custom prototype.
+      this.localDescription = new (class RTCSessionDescription {
+        get type() {
+          return value.type;
+        }
+        get sdp() {
+          return value.sdp;
+        }
+      })();
     }
     async setRemoteDescription() {}
     async addIceCandidate() {}
@@ -90,6 +102,56 @@ function rtc() {
     },
   };
 }
+
+test('native offer and answer serialize as plain Firestore data, including getter-only descriptions', async () => {
+  const fake = rtc();
+  const common = {
+    size: 3,
+    signal: new AbortController().signal,
+    candidate() {},
+    progress() {},
+    complete() {},
+    fail() {},
+  };
+  const sender = openFileChannel(fake.runtime, { ...common, source: {} });
+  const receiver = openFileChannel(fake.runtime, { ...common, sink: {} });
+  try {
+    const offer = await sender.offer();
+    const answer = await receiver.answer(offer);
+    assert.equal(Object.getPrototypeOf(offer), Object.prototype);
+    assert.equal(Object.getPrototypeOf(answer), Object.prototype);
+    assert.deepEqual(offer, { type: 'offer', sdp: 'offer' });
+    assert.deepEqual(answer, { type: 'answer', sdp: 'answer' });
+    assert.deepEqual(fileDescription(fake.peers[0].localDescription, 'offer'), offer);
+    assert.throws(() => fileDescription(null, 'offer'));
+    assert.throws(() => fileDescription({ type: 'answer', sdp: 'wrong type' }, 'offer'));
+  } finally {
+    sender.close();
+    receiver.close();
+  }
+});
+
+test('database failure after picking releases the file, hides provider details, and permits another try', async () => {
+  const f = fixture();
+  f.repository.create = async () => {
+    throw Error(
+      'Function WriteBatch.set() invalid RTCSessionDescription in fileTransfers/private-id',
+    );
+  };
+  await f.model.send();
+  assert.equal(f.model.getSnapshot().error, 'Could not transfer the file. Please try again.');
+  assert.equal(f.model.getSnapshot().busy, false);
+  assert.equal(f.counts().sourceClosed, 1);
+  f.repository.create = async () => record;
+  await f.model.send();
+  assert.equal(f.model.getSnapshot().error, '');
+  assert.equal(f.model.getSnapshot().active.id, id);
+  f.model.stop();
+  assert.equal(
+    fileTransferError(Error('Choose a file up to 100 MB.')),
+    'Choose a file up to 100 MB.',
+  );
+});
 
 test('large encrypted data-channel transfer uses bounded chunks and acknowledges actual writes; no TURN', async () => {
   const fake = rtc(),

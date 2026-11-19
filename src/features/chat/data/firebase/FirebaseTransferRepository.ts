@@ -15,6 +15,7 @@ import {
 import { getFirebaseApp, getFirebaseAuth } from '../../../../config/firebase/client';
 import { ServerClock } from '../../../contacts/data/firebase/ServerClock';
 import { queueChatMessage } from './FirebaseChatRepository';
+import { fileDescription } from '../../models/fileSignaling';
 import {
   DIRECT_FILE_PREFIX,
   type DirectTransfer,
@@ -39,7 +40,7 @@ export class FirebaseTransferRepository implements TransferRepository {
       ref = doc(collection(db, 'fileTransfers'));
     const value = {
       ...info,
-      offer,
+      offer: fileDescription(offer, 'offer'),
       fromId: uid,
       toId: 'peerId' in peer ? peer.peerId : peer.memberId,
       kind: 'requestId' in peer ? 'contact' : 'group',
@@ -140,7 +141,7 @@ export class FirebaseTransferRepository implements TransferRepository {
       const value = (await tx.get(ref)).data();
       if (value?.toId !== uid || value.status !== 'offered')
         throw Error('File invitation is no longer available.');
-      tx.update(ref, { status: 'accepted', answer });
+      tx.update(ref, { status: 'accepted', answer: fileDescription(answer, 'answer') });
     });
   };
   finish: TransferRepository['finish'] = async (uid, id, status) => {

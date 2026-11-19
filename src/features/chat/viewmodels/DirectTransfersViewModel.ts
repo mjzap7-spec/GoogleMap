@@ -1,4 +1,5 @@
 import { ObservableViewModel } from '../../../shared/mvvm/ObservableViewModel';
+import { fileTransferError } from '../models/fileSignaling';
 import type { ChatMessage, ChatPeer } from '../models/chat';
 import {
   directTransferId,
@@ -262,7 +263,7 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
       this.watch(record.id);
       this.publishCandidates(run);
     } catch (error) {
-      this.fail(run, error instanceof Error ? error.message : undefined);
+      this.fail(run, fileTransferError(error));
     }
   };
   accept = async (id: string) => {
@@ -298,7 +299,7 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
         Math.max(0, record.expiresAt - Date.now()),
       );
     } catch (error) {
-      this.fail(run, error instanceof Error ? error.message : undefined);
+      this.fail(run, fileTransferError(error));
     }
   };
   cancel = (id: string) => {

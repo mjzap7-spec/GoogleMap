@@ -1,4 +1,5 @@
 import type { DataTransferSession, DataTransferTransport } from '../../models/directTransfer';
+import { fileDescription } from '../../models/fileSignaling';
 import type { CallCandidate, CallDescription } from '../../../interviews/models/interview';
 
 interface Channel {
@@ -194,7 +195,7 @@ export function openFileChannel(
     async offer() {
       const value = await peer.createOffer();
       await peer.setLocalDescription(value);
-      return peer.localDescription!;
+      return fileDescription(peer.localDescription, 'offer');
     },
     async answer(offer) {
       started = true;
@@ -202,7 +203,7 @@ export function openFileChannel(
       await peer.setRemoteDescription(offer);
       const value = await peer.createAnswer();
       await peer.setLocalDescription(value);
-      return peer.localDescription!;
+      return fileDescription(peer.localDescription, 'answer');
     },
     async applyAnswer(answer) {
       started = true;
