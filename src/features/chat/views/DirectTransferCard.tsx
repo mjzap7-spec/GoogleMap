@@ -51,25 +51,28 @@ export function DirectTransferCard({
     ? Math.min(100, Math.floor(((active?.bytes ?? 0) / record.size) * 100))
     : 0;
   const downloadable = !mine && !!file;
-  const status = file?.saving
-    ? 'Saving…'
-    : live
-      ? active?.phase === 'transferring'
-        ? 'Transferring…'
-        : mine
-          ? 'Waiting for recipient…'
-          : 'Receiving…'
-      : record?.status === 'failed'
-        ? (actions?.state.failures[id] ?? 'Transfer failed')
-        : record?.status === 'cancelled'
-          ? 'Transfer cancelled'
-          : record?.status === 'declined'
-            ? 'Transfer declined'
-            : !file && record?.status === 'completed'
-              ? 'File is not on this device. Ask the sender to resend.'
-              : !file && record
-                ? 'File invitation expired. Please send it again.'
-                : '';
+  const failure = actions?.state.failures[id];
+  const status =
+    failure ||
+    (file?.saving
+      ? 'Saving…'
+      : live
+        ? active?.phase === 'transferring'
+          ? 'Transferring…'
+          : mine
+            ? 'Waiting for recipient…'
+            : 'Receiving…'
+        : record?.status === 'failed'
+          ? (actions?.state.failures[id] ?? 'Transfer failed')
+          : record?.status === 'cancelled'
+            ? 'Transfer cancelled'
+            : record?.status === 'declined'
+              ? 'Transfer declined'
+              : !file && record?.status === 'completed'
+                ? 'File is not on this device. Ask the sender to resend.'
+                : !file && record
+                  ? 'File invitation expired. Please send it again.'
+                  : '');
   return (
     <View style={s.card}>
       <Pressable
@@ -121,6 +124,19 @@ export function DirectTransferCard({
         >
           <View style={[s.fill, { width: `${percent}%` }]} />
         </View>
+      )}
+      {live && failure && !mine && (
+        <Pressable
+          accessibilityRole="button"
+          disabled={disabled || actions?.state.busy}
+          onPress={(event) => {
+            event.stopPropagation();
+            void actions?.accept(id);
+          }}
+          style={s.cancel}
+        >
+          <Text style={s.action}>{t('Try again')}</Text>
+        </Pressable>
       )}
       {live && (
         <Pressable

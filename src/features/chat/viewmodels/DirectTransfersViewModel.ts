@@ -439,7 +439,11 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
     const run = this.begin();
     if (!run) return;
     run.id = id;
-    this.update({ active: { id, phase: 'connecting', bytes: 0 } });
+    const failures = { ...this.state.failures };
+    delete failures[id];
+    this.update({ active: { id, phase: 'connecting', bytes: 0 }, failures });
+    let stage = 'receiver storage';
+    console.info('[File transfer] Receive setup', { stage });
     try {
       const sink = await this.device!.receive(record);
       if (!this.current(run)) {
@@ -447,11 +451,16 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
         return;
       }
       run.sink = sink;
+      stage = 'receiver relay';
+      console.info('[File transfer] Receive setup', { stage });
       run.session = this.open(run, record.size);
       const answer = await run.session.answer(record.offer);
       if (!this.current(run)) return;
+      stage = 'accept invitation';
+      console.info('[File transfer] Receive setup', { stage });
       await this.repository!.accept(this.uid, id, answer);
       if (!this.current(run)) return;
+      console.info('[File transfer] Receive setup', { stage: 'answer published' });
       run.writable = true;
       this.remoteCandidates(run);
       this.publishCandidates(run);
@@ -460,7 +469,27 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
         Math.max(0, record.expiresAt - Date.now()),
       );
     } catch (error) {
-      this.fail(run, fileTransferError(error));
+      console.warn('[File transfer] Receive setup failed', {
+        stage,
+        code: (error as { code?: string })?.code ?? 'unknown',
+        name: error instanceof Error ? error.name : 'unknown',
+        detail:
+          error instanceof Error
+            ? error.message
+                .replace(/https?:\/\/[^\s]+/g, '[url]')
+                .replace(
+                  /(?:ice-pwd|ice-ufrag|credential|password|token|apiKey|authorization)[^\r\n]*/gi,
+                  '[redacted]',
+                )
+                .slice(0, 180)
+            : '',
+      });
+      this.fail(
+        run,
+        stage === 'receiver storage'
+          ? 'Could not prepare this file on your device.'
+          : fileTransferError(error),
+      );
     }
   };
   cancel = (id: string) => {

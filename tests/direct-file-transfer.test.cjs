@@ -1026,3 +1026,28 @@ test('candidates embedded in SDP are not applied again through the signaling lis
     session.close();
   }
 });
+
+test('recipient storage errors remain visible on the offered card and clear when retry succeeds', async () => {
+  let failing = true;
+  const f = fixture('bob', {
+    async receive() {
+      if (failing)
+        throw Object.assign(Error('Cannot create cache file'), {
+          code: 'ERR_FILESYSTEM_CANNOT_CREATE',
+        });
+      return { async write() {}, async save() {}, close() {} };
+    },
+  });
+  f.model.sync([{ text: DIRECT_FILE_PREFIX + id }]);
+  f.emit();
+  await f.model.accept(id);
+  assert.equal(f.model.getSnapshot().failures[id], 'Could not prepare this file on your device.');
+  assert.equal(f.model.getSnapshot().records[id].status, 'offered');
+  assert.equal(f.model.getSnapshot().busy, false);
+  assert.deepEqual(f.endings, []); // Never terminate a transfer accepted by another device.
+  failing = false;
+  await f.model.accept(id);
+  assert.equal(f.model.getSnapshot().failures[id], undefined);
+  assert.equal(f.model.getSnapshot().active.phase, 'connecting');
+  f.model.stop();
+});

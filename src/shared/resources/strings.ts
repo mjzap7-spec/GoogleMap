@@ -8,6 +8,13 @@ export type StringTranslations = readonly [
 ];
 
 export const strings: Readonly<Record<string, StringTranslations>> = {
+  'Could not prepare this file on your device.': [
+    'No se pudo preparar este archivo en tu dispositivo.',
+    'Impossible de préparer ce fichier sur votre appareil.',
+    'Diese Datei konnte auf deinem Gerät nicht vorbereitet werden.',
+    '无法在此设备上准备该文件。',
+    'この端末でファイルを準備できませんでした。',
+  ],
   'The file relay is unavailable. Please try again later.': [
     'El servicio de transferencia no está disponible. Inténtalo más tarde.',
     'Le relais de fichiers est indisponible. Réessayez plus tard.',
