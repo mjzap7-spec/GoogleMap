@@ -18,6 +18,7 @@ export function fileDescription(
 
 const userMessages = new Set([
   'Choose a file up to 100 MB.',
+  'The file relay is unavailable. Please try again later.',
   'File invitation is no longer available.',
   'File sharing is unavailable on this device.',
   'Choose a private chat to send a file directly.',

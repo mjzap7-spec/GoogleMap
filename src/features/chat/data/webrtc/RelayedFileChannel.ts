@@ -18,7 +18,15 @@ export function openRelayedFileChannel(
   options.signal.addEventListener('abort', close, { once: true });
   const ready = servers.then((values) => {
     if (closed || options.signal.aborted) throw Error('Transfer cancelled');
-    session = openFileChannel(runtime, options, values);
+    const relayOnly = values.some(
+      (server) =>
+        !!server.username &&
+        !!server.credential &&
+        (Array.isArray(server.urls) ? server.urls : [server.urls]).some((url) =>
+          /^turns?:/.test(url),
+        ),
+    );
+    session = openFileChannel(runtime, options, values, { relayOnly });
     return session;
   });
   void ready.catch(() => {});

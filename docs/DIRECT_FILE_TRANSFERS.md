@@ -6,7 +6,7 @@ Files receive automatically while the recipient keeps the private chat open. Ima
 
 ## Cost and connection limits
 
-The data channel first attempts available direct paths and uses the same authenticated TURN configuration as calls when needed (`EXPO_PUBLIC_CALL_ICE_ENDPOINT`). No new provider account or payment method is added. Relayed bytes count toward the existing Metered allowance; the free allowance is finite. Firestore signaling also counts toward the Firebase project quotas. File bytes are not stored in Firestore, Cloudinary, or the attachment Worker.
+When authenticated TURN credentials are configured through `EXPO_PUBLIC_CALL_ICE_ENDPOINT`, file transfers use relay-only ICE to avoid unreliable direct paths between emulator networks. Offers and answers include gathered candidates as a fallback to the Firestore candidate listener, with a bounded five-second gathering window. Without a configured relay, the app attempts a direct STUN connection, which is not guaranteed across networks. No new provider account or payment method is added. Relayed bytes count toward the existing Metered allowance; the free allowance is finite. Firestore signaling also counts toward the Firebase project quotas. File bytes are not stored in Firestore, Cloudinary, or the attachment Worker.
 
 TURN improves connectivity across different networks, but exhausted relay quotas, blocked networks, or offline devices can still prevent delivery. Transfers are limited to 100 MB per file, one active file per conversation, and a 30-minute invitation/session window. This is not unlimited storage or guaranteed offline delivery.
 

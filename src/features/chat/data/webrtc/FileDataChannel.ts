@@ -15,6 +15,7 @@ interface Channel {
 interface Peer {
   localDescription: CallDescription | null;
   connectionState: string;
+  iceGatheringState?: string;
   createDataChannel(label: string, options: { ordered: boolean }): Channel;
   addEventListener(
     name: string,
@@ -28,7 +29,10 @@ interface Peer {
   close(): void;
 }
 export interface FileRtcRuntime {
-  RTCPeerConnection: new (config: { iceServers: IceServer[] }) => Peer;
+  RTCPeerConnection: new (config: {
+    iceServers: IceServer[];
+    iceTransportPolicy?: 'relay';
+  }) => Peer;
 }
 const CHUNK = 16 * 1024;
 const WINDOW = 256 * 1024;
@@ -38,9 +42,11 @@ export function openFileChannel(
   runtime: FileRtcRuntime,
   options: Parameters<DataTransferTransport['open']>[0],
   iceServers: IceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }],
+  connection: { relayOnly?: boolean; gatherTimeoutMs?: number } = {},
 ): DataTransferSession {
   const peer = new runtime.RTCPeerConnection({
     iceServers,
+    ...(connection.relayOnly ? { iceTransportPolicy: 'relay' as const } : {}),
   });
   let channel: Channel | undefined;
   let closed = false,
@@ -53,9 +59,19 @@ export function openFileChannel(
     lastPaint = 0,
     started = false;
   let queue = Promise.resolve();
+  const localTypes = new Set<string>();
+  let remoteCandidates = 0;
+  const remoteSeen = new Set<string>();
+  const rememberRemote = (description: CallDescription) => {
+    for (const line of description.sdp.split(/\r?\n/))
+      if (line.startsWith('a=candidate:')) remoteSeen.add(line.slice(2).trim());
+    remoteCandidates = remoteSeen.size;
+  };
+  let endGather: (() => void) | undefined;
   const close = () => {
     if (closed) return;
     closed = true;
+    endGather?.();
     clearInterval(watchdog);
     options.signal.removeEventListener('abort', close);
     channel?.close();
@@ -70,6 +86,8 @@ export function openFileChannel(
       sent,
       acknowledged,
       received,
+      localCandidateTypes: [...localTypes],
+      remoteCandidates,
     });
     close();
     options.fail(message);
@@ -192,6 +210,8 @@ export function openFileChannel(
   peer.addEventListener('icecandidate', ({ candidate }) => {
     if (!closed && candidate) {
       const value = candidate.toJSON();
+      const type = /\btyp (host|srflx|prflx|relay)\b/.exec(value.candidate)?.[1];
+      if (type) localTypes.add(type);
       if (value.candidate)
         options.candidate({
           candidate: value.candidate,
@@ -210,27 +230,66 @@ export function openFileChannel(
   });
   if (options.source) attach(peer.createDataChannel('private-file-v1', { ordered: true }));
   if (options.signal.aborted) close();
+  peer.addEventListener('icegatheringstatechange', () => {
+    if (peer.iceGatheringState === 'complete') endGather?.();
+  });
+  const gather = async () => {
+    // Include candidates in SDP as a fallback to separate Firestore candidate delivery.
+    if (peer.iceGatheringState && peer.iceGatheringState !== 'complete' && !closed) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(finish, connection.gatherTimeoutMs ?? 5000);
+        function finish() {
+          clearTimeout(timer);
+          endGather = undefined;
+          resolve();
+        }
+        endGather = finish;
+      });
+    }
+    if (closed) throw Error('Transfer cancelled');
+    if (
+      connection.relayOnly &&
+      !localTypes.has('relay') &&
+      !/\btyp relay\b/.test(peer.localDescription?.sdp ?? '')
+    ) {
+      console.warn('[File transfer] No relay candidate available', {
+        localCandidateTypes: [...localTypes],
+      });
+      throw Error('The file relay is unavailable. Please try again later.');
+    }
+  };
   return {
     async offer() {
       const value = await peer.createOffer();
       await peer.setLocalDescription(value);
+      await gather();
       return fileDescription(peer.localDescription, 'offer');
     },
     async answer(offer) {
       started = true;
       lastActivity = Date.now();
       await peer.setRemoteDescription(offer);
+      rememberRemote(offer);
       const value = await peer.createAnswer();
       await peer.setLocalDescription(value);
+      await gather();
       return fileDescription(peer.localDescription, 'answer');
     },
     async applyAnswer(answer) {
       started = true;
       lastActivity = Date.now();
-      if (!closed) await peer.setRemoteDescription(answer);
+      if (!closed) {
+        await peer.setRemoteDescription(answer);
+        rememberRemote(answer);
+      }
     },
     async candidate(value) {
-      if (!closed) await peer.addIceCandidate(value);
+      const key = value.candidate.trim();
+      if (!closed && !remoteSeen.has(key)) {
+        await peer.addIceCandidate(value);
+        remoteSeen.add(key);
+        remoteCandidates = remoteSeen.size;
+      }
     },
     close,
   };

@@ -8,6 +8,13 @@ export type StringTranslations = readonly [
 ];
 
 export const strings: Readonly<Record<string, StringTranslations>> = {
+  'The file relay is unavailable. Please try again later.': [
+    'El servicio de transferencia no está disponible. Inténtalo más tarde.',
+    'Le relais de fichiers est indisponible. Réessayez plus tard.',
+    'Der Datei-Relay ist nicht verfügbar. Bitte später erneut versuchen.',
+    '文件中继服务不可用，请稍后重试。',
+    'ファイル中継サービスを利用できません。後でもう一度お試しください。',
+  ],
   'Ready to send': [
     'Listo para enviar',
     'Prêt à envoyer',

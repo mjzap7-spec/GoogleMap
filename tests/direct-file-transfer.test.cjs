@@ -59,12 +59,16 @@ function rtc(alreadyOpen = false) {
       super();
       peers.push(this);
       configs.push(config);
+      this.relayOnly = config.iceTransportPolicy === 'relay';
     }
     createDataChannel() {
       return (this.channel = new Channel());
     }
     async createOffer() {
-      return { type: 'offer', sdp: 'offer' };
+      return {
+        type: 'offer',
+        sdp: this.relayOnly ? 'offer\na=candidate:1 1 udp 1 192.0.2.1 5000 typ relay\n' : 'offer',
+      };
     }
     async createAnswer() {
       return { type: 'answer', sdp: 'answer' };
@@ -574,6 +578,7 @@ test('configured relay reaches the file peer; cancelled credential loading never
   const session = openRelayedFileChannel(fake.runtime, common, Promise.resolve(servers));
   await session.offer();
   assert.deepEqual(fake.configs[0].iceServers, servers);
+  assert.equal(fake.configs[0].iceTransportPolicy, 'relay');
   session.close();
   let resolve;
   const abort = new AbortController();
@@ -915,4 +920,109 @@ test('sender preview persistence failure does not fail the actual file transfer'
   await tick();
   assert.equal(f.counts().applied, 1);
   f.model.stop();
+});
+
+test('file offer embeds gathered relay candidates before publishing its SDP', async () => {
+  const fake = rtc();
+  const options = {
+    size: 3,
+    source: {},
+    signal: new AbortController().signal,
+    candidate() {},
+    progress() {},
+    complete() {},
+    fail() {},
+  };
+  const session = openFileChannel(
+    fake.runtime,
+    options,
+    [{ urls: 'turn:relay.example', username: 'temporary', credential: 'test' }],
+    { relayOnly: true, gatherTimeoutMs: 100 },
+  );
+  const peer = fake.peers[0];
+  peer.iceGatheringState = 'gathering';
+  peer.createOffer = async () => ({ type: 'offer', sdp: 'initial' });
+  const pending = session.offer();
+  await tick();
+  const sdp = 'v=0\r\na=candidate:1 1 udp 1 192.0.2.1 5000 typ relay\r\n';
+  peer.localDescription = { type: 'offer', sdp };
+  peer.iceGatheringState = 'complete';
+  peer.emit('icegatheringstatechange');
+  assert.deepEqual(await pending, { type: 'offer', sdp });
+  session.close();
+});
+
+test('an unavailable configured relay fails with an actionable message before creating an invitation', async () => {
+  const fake = rtc();
+  const session = openFileChannel(
+    fake.runtime,
+    {
+      size: 3,
+      source: {},
+      signal: new AbortController().signal,
+      candidate() {},
+      progress() {},
+      complete() {},
+      fail() {},
+    },
+    [],
+    { relayOnly: true, gatherTimeoutMs: 5 },
+  );
+  const peer = fake.peers[0];
+  peer.iceGatheringState = 'gathering';
+  peer.createOffer = async () => ({ type: 'offer', sdp: 'no candidates' });
+  try {
+    await assert.rejects(session.offer(), /file relay is unavailable/);
+  } finally {
+    session.close();
+  }
+});
+
+test('leaving during candidate gathering cancels the wait and closes the peer', async () => {
+  const fake = rtc();
+  const abort = new AbortController();
+  const session = openFileChannel(fake.runtime, {
+    size: 3,
+    source: {},
+    signal: abort.signal,
+    candidate() {},
+    progress() {},
+    complete() {},
+    fail() {},
+  });
+  fake.peers[0].iceGatheringState = 'gathering';
+  const pending = session.offer();
+  await tick();
+  abort.abort();
+  await assert.rejects(pending, /cancelled/i);
+  assert.equal(fake.peers[0].closed, true);
+});
+
+test('candidates embedded in SDP are not applied again through the signaling listener', async () => {
+  const fake = rtc();
+  let applied = 0;
+  const session = openFileChannel(fake.runtime, {
+    size: 3,
+    source: {},
+    signal: new AbortController().signal,
+    candidate() {},
+    progress() {},
+    complete() {},
+    fail() {},
+  });
+  fake.peers[0].addIceCandidate = async () => {
+    applied++;
+  };
+  const candidate = 'candidate:1 1 udp 1 192.0.2.1 5000 typ relay';
+  try {
+    await session.applyAnswer({ type: 'answer', sdp: 'v=0\r\na=' + candidate + '\r\n' });
+    await session.candidate({ candidate, sdpMid: '0', sdpMLineIndex: 0 });
+    assert.equal(applied, 0);
+    const next = { candidate: candidate.replace(':1 ', ':2 '), sdpMid: '0', sdpMLineIndex: 0 };
+    await session.candidate(next);
+    await session.candidate(next);
+    assert.equal(applied, 1);
+  } finally {
+    session.close();
+  }
 });
