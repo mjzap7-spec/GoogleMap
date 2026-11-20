@@ -29,6 +29,14 @@ function setMetroHost(xml, port) {
   return xml.replace('</map>', `${setting}</map>`);
 }
 
+function avdsToBoot(running, installed) {
+  if (running.length) return [];
+  const names = installed.map((name) => name.trim()).filter(Boolean);
+  if (!names.length)
+    throw new Error('Create an Android emulator in Android Studio Device Manager first.');
+  return [Object.keys(ports).find((name) => names.includes(name)) ?? names[0]];
+}
+
 async function main(sharedPort, { bootMissing = false } = {}) {
   const candidates = [
     process.env.ANDROID_HOME,
@@ -51,10 +59,10 @@ async function main(sharedPort, { bootMissing = false } = {}) {
   const findTargets = () =>
     parseDevices(adb(['devices'])).flatMap((serial) => {
       const name = adb(['-s', serial, 'emu', 'avd', 'name']).split(/\r?\n/)[0].trim();
-      return ports[name] ? [{ serial, name, port: sharedPort ?? ports[name] }] : [];
+      return [{ serial, name, port: sharedPort ?? ports[name] ?? 8081 }];
     });
   let targets = findTargets();
-  if (bootMissing) {
+  if (bootMissing && !targets.length) {
     const emulator = path.resolve(adbPath, '../../emulator/emulator.exe');
     const installedAvds = execFileSync(emulator, ['-list-avds'], {
       encoding: 'utf8',
@@ -62,10 +70,7 @@ async function main(sharedPort, { bootMissing = false } = {}) {
     })
       .trim()
       .split(/\r?\n/);
-    for (const name of Object.keys(ports)) {
-      if (targets.some((target) => target.name === name)) continue;
-      if (!installedAvds.includes(name))
-        throw new Error(`Create ${name} in Android Studio Device Manager first.`);
+    for (const name of avdsToBoot(targets, installedAvds)) {
       console.log(`Starting ${name}...`);
       const args = ['-avd', name];
       if (name === 'Pixel_8a') args.push('-no-snapshot-load');
@@ -92,7 +97,7 @@ async function main(sharedPort, { bootMissing = false } = {}) {
     }
   }
   if (!targets.length)
-    throw new Error('Start Pixel_8a or Pixel_8, wait for Android to boot, then retry.');
+    throw new Error('Start an Android emulator, wait for Android to boot, then retry.');
 
   // Validate all servers before stopping an app or changing its preferences.
   for (const port of new Set(targets.map((target) => target.port))) {
@@ -137,7 +142,7 @@ async function main(sharedPort, { bootMissing = false } = {}) {
   }
 }
 
-module.exports = { parseDevices, setMetroHost, openEmulators: main };
+module.exports = { parseDevices, setMetroHost, avdsToBoot, openEmulators: main };
 if (require.main === module)
   main().catch((error) => {
     console.error(error.message);

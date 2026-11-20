@@ -53,7 +53,7 @@ async function main(
     if (reused) log(`Using this project's existing Metro server on ${port}.`);
     else metro = await start(port);
     await open(port, { bootMissing: true });
-    log(`Both apps use port ${port}. Keep the Metro terminal open while testing.`);
+    log(`Connected emulators use port ${port}. Keep the Metro terminal open while testing.`);
     if (args[0] === '--route') await play(...args.slice(1));
   } catch (error) {
     // Never stop a server that was already running before this command.

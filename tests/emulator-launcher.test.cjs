@@ -145,3 +145,13 @@ test('changing Metro host preserves other developer preferences and replaces sta
   assert.match(setMetroHost('<map></map>', 8081), /localhost:8081/);
   assert.throws(() => setMetroHost('not XML', 8081), /refusing/);
 });
+
+test('an existing emulator never requires another named AVD to be installed', () => {
+  const { avdsToBoot } = require('../scripts/open-emulators.cjs');
+  assert.deepEqual(avdsToBoot([{ name: 'Pixel_8' }], ['Pixel_8']), []);
+  assert.deepEqual(avdsToBoot([{ name: 'My_Test_Phone' }], []), []);
+  assert.deepEqual(avdsToBoot([], ['Pixel_8']), ['Pixel_8']);
+  assert.deepEqual(avdsToBoot([], ['My_Test_Phone']), ['My_Test_Phone']);
+  assert.deepEqual(avdsToBoot([], ['Pixel_8a', 'Pixel_8']), ['Pixel_8a']);
+  assert.throws(() => avdsToBoot([], ['', ' ']), /Create an Android emulator/);
+});
