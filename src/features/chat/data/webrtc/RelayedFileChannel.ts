@@ -16,19 +16,24 @@ export function openRelayedFileChannel(
     options.signal.removeEventListener('abort', close);
   };
   options.signal.addEventListener('abort', close, { once: true });
-  const ready = servers.then((values) => {
-    if (closed || options.signal.aborted) throw Error('Transfer cancelled');
-    const relayOnly = values.some(
-      (server) =>
-        !!server.username &&
-        !!server.credential &&
+  const directServer = { urls: 'stun:stun.l.google.com:19302' };
+  const ready = servers
+    .catch(() => {
+      if (closed || options.signal.aborted) throw Error('Transfer cancelled');
+      console.info('[File transfer] Relay credentials unavailable; trying a direct connection.');
+      return [directServer];
+    })
+    .then((values) => {
+      if (closed || options.signal.aborted) throw Error('Transfer cancelled');
+      const hasStun = values.some((server) =>
         (Array.isArray(server.urls) ? server.urls : [server.urls]).some((url) =>
-          /^turns?:/.test(url),
+          /^stuns?:/.test(url),
         ),
-    );
-    session = openFileChannel(runtime, options, values, { relayOnly });
-    return session;
-  });
+      );
+      // Preserve free direct paths even when a configured relay has exhausted its allowance.
+      session = openFileChannel(runtime, options, hasStun ? values : [...values, directServer]);
+      return session;
+    });
   void ready.catch(() => {});
   return {
     offer: async () => (await ready).offer(),

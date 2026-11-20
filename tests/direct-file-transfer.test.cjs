@@ -577,8 +577,9 @@ test('configured relay reaches the file peer; cancelled credential loading never
   ];
   const session = openRelayedFileChannel(fake.runtime, common, Promise.resolve(servers));
   await session.offer();
-  assert.deepEqual(fake.configs[0].iceServers, servers);
-  assert.equal(fake.configs[0].iceTransportPolicy, 'relay');
+  assert.deepEqual(fake.configs[0].iceServers[0], servers[0]);
+  assert.equal(fake.configs[0].iceTransportPolicy, undefined);
+  assert.ok(fake.configs[0].iceServers.some((server) => /^stun:/.test(server.urls)));
   session.close();
   let resolve;
   const abort = new AbortController();
@@ -1050,4 +1051,31 @@ test('recipient storage errors remain visible on the offered card and clear when
   assert.equal(f.model.getSnapshot().failures[id], undefined);
   assert.equal(f.model.getSnapshot().active.phase, 'connecting');
   f.model.stop();
+});
+
+test('relay credential failure still allows a private direct connection attempt', async () => {
+  const {
+    openRelayedFileChannel,
+  } = require('../.test-build/features/chat/data/webrtc/RelayedFileChannel');
+  const fake = rtc();
+  const session = openRelayedFileChannel(
+    fake.runtime,
+    {
+      size: 3,
+      source: {},
+      signal: new AbortController().signal,
+      candidate() {},
+      progress() {},
+      complete() {},
+      fail() {},
+    },
+    Promise.reject(Error('Relay allowance exhausted')),
+  );
+  try {
+    await session.offer();
+    assert.equal(fake.configs[0].iceTransportPolicy, undefined);
+    assert.deepEqual(fake.configs[0].iceServers, [{ urls: 'stun:stun.l.google.com:19302' }]);
+  } finally {
+    session.close();
+  }
 });
