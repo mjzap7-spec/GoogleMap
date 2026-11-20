@@ -57,6 +57,8 @@ const Thread = memo(function Thread({
     () => ({
       state: directState,
       send: direct.send,
+      pick: direct.pick,
+      clearDraft: direct.clearDraft,
       accept: direct.accept,
       cancel: direct.cancel,
       save: direct.save,

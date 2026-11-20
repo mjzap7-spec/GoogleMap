@@ -10,6 +10,8 @@ import type {
 export interface DirectTransferActions {
   state: TransferState;
   send: DirectTransfersViewModel['send'];
+  pick: DirectTransfersViewModel['pick'];
+  clearDraft: DirectTransfersViewModel['clearDraft'];
   accept: DirectTransfersViewModel['accept'];
   cancel: DirectTransfersViewModel['cancel'];
   save: DirectTransfersViewModel['save'];
@@ -58,7 +60,7 @@ export function DirectTransferCard({
           ? 'Waiting for recipient…'
           : 'Receiving…'
       : record?.status === 'failed'
-        ? 'Transfer failed'
+        ? (actions?.state.failures[id] ?? 'Transfer failed')
         : record?.status === 'cancelled'
           ? 'Transfer cancelled'
           : record?.status === 'declined'

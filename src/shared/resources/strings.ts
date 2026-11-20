@@ -8,6 +8,27 @@ export type StringTranslations = readonly [
 ];
 
 export const strings: Readonly<Record<string, StringTranslations>> = {
+  'Ready to send': [
+    'Listo para enviar',
+    'Prêt à envoyer',
+    'Bereit zum Senden',
+    '准备发送',
+    '送信準備完了',
+  ],
+  'Remove attachment': [
+    'Quitar archivo adjunto',
+    'Retirer la pièce jointe',
+    'Anhang entfernen',
+    '移除附件',
+    '添付ファイルを削除',
+  ],
+  'Send file': [
+    'Enviar archivo',
+    'Envoyer le fichier',
+    'Datei senden',
+    '发送文件',
+    'ファイルを送信',
+  ],
   'The Chats badge counts unread messages and unattended incoming calls. Answered and declined calls do not add to it. Open a conversation to clear its badge. The Unread filter helps you find these conversations.':
     [
       'La insignia cuenta mensajes sin leer y llamadas entrantes sin atender. Las llamadas contestadas o rechazadas no se suman. Abre una conversación para borrar su contador. El filtro No leídos te ayuda a encontrarlas.',

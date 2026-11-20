@@ -27,7 +27,7 @@ const record = {
   offer: { type: 'offer', sdp: 'offer' },
 };
 
-function rtc() {
+function rtc(alreadyOpen = false) {
   const peers = [],
     configs = [];
   class Events {
@@ -41,7 +41,7 @@ function rtc() {
   }
   class Channel extends Events {
     label = 'private-file-v1';
-    readyState = 'open';
+    readyState = alreadyOpen ? 'open' : 'connecting';
     bufferedAmount = 0;
     sent = [];
     send(data) {
@@ -90,14 +90,17 @@ function rtc() {
     runtime: { RTCPeerConnection },
     peers,
     configs,
-    connect() {
+    connect(emitOpen = true) {
       const outgoing = peers[0].channel,
         incoming = new Channel();
       incoming.other = outgoing;
       outgoing.other = incoming;
       peers[1].emit('datachannel', { channel: incoming });
-      outgoing.emit('open');
-      incoming.emit('open');
+      outgoing.readyState = incoming.readyState = 'open';
+      if (emitOpen) {
+        outgoing.emit('open');
+        incoming.emit('open');
+      }
       return incoming;
     },
   };
@@ -319,6 +322,7 @@ test('waiting for Accept does not time out the network; accepted stalled connect
 function fixture(uid = 'alice', devicePatch = {}, automatic = false) {
   let listener,
     options,
+    applied = 0,
     picks = 0,
     sourceClosed = 0,
     sinkClosed = 0,
@@ -377,7 +381,9 @@ function fixture(uid = 'alice', devicePatch = {}, automatic = false) {
           async answer() {
             return { type: 'answer', sdp: 'answer' };
           },
-          async applyAnswer() {},
+          async applyAnswer() {
+            applied++;
+          },
           async candidate() {},
           close() {},
         };
@@ -397,7 +403,7 @@ function fixture(uid = 'alice', devicePatch = {}, automatic = false) {
     get options() {
       return options;
     },
-    counts: () => ({ picks, sourceClosed, sinkClosed, saves }),
+    counts: () => ({ picks, sourceClosed, sinkClosed, saves, applied }),
   };
 }
 
@@ -751,4 +757,162 @@ test('sender completion waits until recipient flushes and persists the received 
     sender.close();
     receiver.close();
   }
+});
+
+test('picking stages a local file without signaling; Send uses that draft exactly once', async () => {
+  const f = fixture();
+  let created = 0;
+  f.repository.create = async () => {
+    created++;
+    return record;
+  };
+  await f.model.pick();
+  assert.equal(created, 0);
+  assert.equal(f.options, undefined);
+  assert.equal(f.model.getSnapshot().draft.name, record.name);
+  assert.equal(f.model.getSnapshot().busy, false);
+  await Promise.all([f.model.send(), f.model.send()]);
+  assert.equal(created, 1);
+  assert.equal(f.counts().picks, 1);
+  assert.equal(f.model.getSnapshot().draft, undefined);
+  f.model.stop();
+  assert.equal(f.counts().sourceClosed, 1);
+});
+
+test('removing a draft and leaving during the picker close local files without sending', async () => {
+  const f = fixture();
+  await f.model.pick();
+  f.model.clearDraft();
+  assert.equal(f.model.getSnapshot().draft, undefined);
+  assert.equal(f.counts().sourceClosed, 1);
+  f.model.stop();
+  let resolve,
+    closed = 0;
+  const late = fixture('alice', {
+    pick: () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  });
+  const pending = late.model.pick();
+  late.model.stop();
+  resolve({
+    ...record,
+    close() {
+      closed++;
+    },
+  });
+  await pending;
+  assert.equal(closed, 1);
+  assert.equal(late.options, undefined);
+  assert.equal(late.model.getSnapshot().draft, undefined);
+});
+
+test('already-open native data channels transfer once even without a later open event', async () => {
+  const fake = rtc(true);
+  let sent = 0,
+    received = 0,
+    reads = 0;
+  const common = {
+    size: 3,
+    signal: new AbortController().signal,
+    candidate() {},
+    progress() {},
+    fail(message) {
+      assert.fail(message);
+    },
+  };
+  const sender = openFileChannel(fake.runtime, {
+    ...common,
+    source: {
+      async read() {
+        reads++;
+        return Uint8Array.of(1, 2, 3);
+      },
+    },
+    complete() {
+      sent++;
+    },
+  });
+  const receiver = openFileChannel(fake.runtime, {
+    ...common,
+    sink: {
+      async write(bytes) {
+        assert.deepEqual([...bytes], [1, 2, 3]);
+      },
+    },
+    complete() {
+      received++;
+    },
+  });
+  try {
+    fake.connect(false);
+    await tick();
+    await tick();
+    assert.equal(sent, 1);
+    assert.equal(received, 1);
+    assert.equal(reads, 1);
+    fake.peers[0].channel.emit('open');
+    await tick();
+    assert.equal(reads, 1);
+  } finally {
+    sender.close();
+    receiver.close();
+  }
+});
+
+test('an answer arriving before create resolves survives sender preparation and applies once', async () => {
+  let create, keep;
+  const f = fixture('alice', {
+    async pick() {
+      return {
+        ...record,
+        close() {},
+        keep: () =>
+          new Promise((resolve) => {
+            keep = resolve;
+          }),
+      };
+    },
+  });
+  f.repository.create = () =>
+    new Promise((resolve) => {
+      create = resolve;
+    });
+  const sending = f.model.send();
+  await tick();
+  f.model.sync([{ text: DIRECT_FILE_PREFIX + id }]);
+  f.emit({ ...record, status: 'accepted', answer: { type: 'answer', sdp: 'early' } });
+  create(record);
+  await tick();
+  assert.equal(f.counts().applied, 0);
+  assert.equal(f.model.getSnapshot().records[id].status, 'accepted');
+  keep({ uri: 'file:///photo', async save() {} });
+  await sending;
+  await tick();
+  assert.equal(f.counts().applied, 1);
+  assert.equal(f.model.getSnapshot().active.phase, 'connecting');
+  f.model.stop();
+});
+
+test('sender preview persistence failure does not fail the actual file transfer', async () => {
+  const f = fixture('alice', {
+    async pick() {
+      return {
+        ...record,
+        close() {},
+        async keep() {
+          throw Error('No storage for duplicate preview');
+        },
+      };
+    },
+  });
+  await f.model.send();
+  assert.equal(f.model.getSnapshot().active.phase, 'waiting');
+  assert.equal(f.model.getSnapshot().error, '');
+  assert.equal(f.endings.includes('failed'), false);
+  f.emit({ ...record, status: 'accepted', answer: { type: 'answer', sdp: 'answer' } });
+  await tick();
+  assert.equal(f.counts().applied, 1);
+  f.model.stop();
 });

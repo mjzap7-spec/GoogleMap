@@ -19,11 +19,14 @@ type Phase = 'waiting' | 'connecting' | 'transferring' | 'ready' | 'completed';
 export interface TransferState {
   records: Record<string, DirectTransfer>;
   files: Record<string, { uri: string; saving?: boolean }>;
+  failures: Record<string, string>;
+  draft?: { name: string; size: number; mime: string; previewUri?: string };
   busy: boolean;
   error: string;
   active?: { id: string; phase: Phase; bytes: number; saving?: boolean };
 }
 interface Running {
+  preparing?: boolean;
   id?: string;
   source?: TransferSource;
   sink?: TransferSink;
@@ -42,6 +45,7 @@ const terminal = (value: DirectTransfer) => !['offered', 'accepted'].includes(va
 export class DirectTransfersViewModel extends ObservableViewModel<TransferState> {
   private subscriptions = new Map<string, () => void>();
   private running?: Running;
+  private draftSource?: TransferSource;
   private files = new Map<string, LocalTransferFile>();
   private loaded = new Set<string>();
   private attempted = new Set<string>();
@@ -54,7 +58,7 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
     private peer: ChatPeer,
     private automatic = true,
   ) {
-    super({ records: {}, files: {}, busy: false, error: '' });
+    super({ records: {}, files: {}, failures: {}, busy: false, error: '' });
   }
   sync = (messages: readonly ChatMessage[]) => {
     const ids = new Set(
@@ -89,35 +93,7 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
           this.update({ records: { ...this.state.records, [id]: value } });
           void this.restore(id);
           this.autoReceive();
-          const run = this.running;
-          if (run?.id !== id) return;
-          if (terminal(value)) {
-            if (value.status === 'completed' && this.state.active?.phase === 'ready') {
-              run.session?.close();
-              run.stopCandidates?.();
-              clearTimeout(run.timer);
-              if (this.files.has(id) || !run.sink?.keep) {
-                this.update({ busy: false });
-                this.autoReceive();
-              }
-            } else if (value.status !== 'completed' || this.state.active?.phase !== 'completed') {
-              this.dispose();
-              this.update({ active: undefined, busy: false });
-              this.autoReceive();
-            }
-          } else if (
-            value.status === 'accepted' &&
-            run.source &&
-            !run.remoteReady &&
-            value.answer
-          ) {
-            run.remoteReady = true;
-            this.update({ active: { id, phase: 'connecting', bytes: 0 } });
-            void run
-              .session!.applyAnswer(value.answer)
-              .then(() => this.remoteCandidates(run))
-              .catch(() => this.fail(run));
-          }
+          this.reconcileRun(value);
         },
         () => {
           if (generation !== this.generation) return;
@@ -129,6 +105,33 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
         },
       ),
     );
+  }
+  private reconcileRun(value: DirectTransfer) {
+    const run = this.running;
+    const id = value.id;
+    if (run?.id !== id || run.preparing) return;
+    if (terminal(value)) {
+      if (value.status === 'completed' && this.state.active?.phase === 'ready') {
+        run.session?.close();
+        run.stopCandidates?.();
+        clearTimeout(run.timer);
+        if (this.files.has(id) || !run.sink?.keep) {
+          this.update({ busy: false });
+          this.autoReceive();
+        }
+      } else if (value.status !== 'completed' || this.state.active?.phase !== 'completed') {
+        this.dispose();
+        this.update({ active: undefined, busy: false });
+        this.autoReceive();
+      }
+    } else if (value.status === 'accepted' && run.source && !run.remoteReady && value.answer) {
+      run.remoteReady = true;
+      this.update({ active: { id, phase: 'connecting', bytes: 0 } });
+      void run
+        .session!.applyAnswer(value.answer)
+        .then(() => this.remoteCandidates(run))
+        .catch(() => this.fail(run));
+    }
   }
   private remember(id: string, file: LocalTransferFile) {
     this.files.get(id)?.release?.();
@@ -188,7 +191,12 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
     if (run.id && (run.source || run.writable))
       void this.repository?.finish(this.uid, run.id, 'failed').catch(() => {});
     this.dispose();
-    this.update({ busy: false, active: undefined, error });
+    this.update({
+      busy: false,
+      active: undefined,
+      error,
+      failures: run.id ? { ...this.state.failures, [run.id]: error } : this.state.failures,
+    });
     this.autoReceive();
   }
   private publishCandidates(run: Running) {
@@ -308,11 +316,54 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
     this.update({ busy: true, error: '', active: undefined });
     return run;
   }
+  clearDraft = () => {
+    this.draftSource?.close();
+    this.draftSource = undefined;
+    this.update({ draft: undefined });
+  };
+  pick = async () => {
+    if (this.state.busy || !this.device || 'senderName' in this.peer) return;
+    const generation = this.generation;
+    this.update({ busy: true, error: '' });
+    try {
+      const source = await this.device.pick();
+      if (generation !== this.generation) {
+        source?.close();
+        return;
+      }
+      if (!source) return;
+      if (source.size <= 0 || source.size > MAX_DIRECT_FILE_BYTES) {
+        source.close();
+        throw Error('Choose a file up to 100 MB.');
+      }
+      this.clearDraft();
+      this.draftSource = source;
+      this.update({
+        draft: {
+          name: source.name,
+          size: source.size,
+          mime: source.mime,
+          previewUri: source.previewUri,
+        },
+      });
+    } catch (error) {
+      if (generation === this.generation) this.update({ error: fileTransferError(error) });
+    } finally {
+      if (generation === this.generation) {
+        this.update({ busy: false });
+        this.autoReceive();
+      }
+    }
+  };
   send = async () => {
     const run = this.begin();
     if (!run) return;
+    let stage = 'file preparation';
+    run.preparing = true;
     try {
-      const source = await this.device!.pick();
+      const source = this.draftSource ?? (await this.device!.pick());
+      this.draftSource = undefined;
+      this.update({ draft: undefined });
       if (!this.current(run)) {
         source?.close();
         return;
@@ -325,9 +376,11 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
       run.source = source;
       if (source.size <= 0 || source.size > MAX_DIRECT_FILE_BYTES)
         throw Error('Choose a file up to 100 MB.');
+      stage = 'relay configuration';
       run.session = this.open(run, source.size);
       const offer = await run.session.offer();
       if (!this.current(run)) return;
+      stage = 'invitation';
       const record = await this.repository!.create(
         this.uid,
         this.peer,
@@ -341,7 +394,7 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
       run.id = record.id;
       run.writable = true;
       this.update({
-        records: { ...this.state.records, [record.id]: record },
+        records: { ...this.state.records, [record.id]: this.state.records[record.id] ?? record },
         active: { id: record.id, phase: 'waiting', bytes: 0 },
       });
       run.timer = setTimeout(
@@ -349,16 +402,28 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
         Math.max(0, record.expiresAt - Date.now()),
       );
       if (source.keep) {
-        const file = await source.keep(this.uid, record.id);
-        if (!this.current(run)) {
-          file.release?.();
-          return;
+        try {
+          const file = await source.keep(this.uid, record.id);
+          if (!this.current(run)) {
+            file.release?.();
+            return;
+          }
+          this.remember(record.id, file);
+        } catch {
+          console.warn('[File transfer] Sender preview could not be saved; continuing transfer.');
         }
-        this.remember(record.id, file);
       }
+      run.preparing = false;
+
       this.watch(record.id);
+      this.reconcileRun(this.state.records[record.id]);
       this.publishCandidates(run);
     } catch (error) {
+      console.warn('[File transfer] Setup failed', {
+        stage,
+        code: (error as { code?: string })?.code ?? 'unknown',
+        name: error instanceof Error ? error.name : 'unknown',
+      });
       this.fail(run, fileTransferError(error));
     }
   };
@@ -455,6 +520,7 @@ export class DirectTransfersViewModel extends ObservableViewModel<TransferState>
   };
   stop = () => {
     this.generation++;
+    this.clearDraft();
     this.files.forEach((file) => file.release?.());
     this.files.clear();
     this.loaded.clear();

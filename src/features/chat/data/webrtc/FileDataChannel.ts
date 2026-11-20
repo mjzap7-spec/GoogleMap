@@ -63,6 +63,14 @@ export function openFileChannel(
   };
   const fail = (message = 'Could not transfer the file. Please try again.') => {
     if (closed || completed) return;
+    console.warn('[File transfer]', {
+      reason: message,
+      connection: peer.connectionState,
+      channel: channel?.readyState,
+      sent,
+      acknowledged,
+      received,
+    });
     close();
     options.fail(message);
   };
@@ -103,10 +111,16 @@ export function openFileChannel(
     }
     channel = incoming;
     channel.binaryType = 'arraybuffer';
-    channel.addEventListener('open', () => {
+    let opened = false;
+    const open = () => {
+      if (closed || opened) return;
+      opened = true;
       lastActivity = Date.now();
       if (options.source) void sendFile();
-    });
+    };
+    channel.addEventListener('open', open);
+    // Native runtimes may deliver an already-open channel before listeners attach.
+    if (channel.readyState === 'open') queueMicrotask(open);
     channel.addEventListener('close', () => {
       if (!completed) fail('File transfer interrupted. Please send it again.');
     });

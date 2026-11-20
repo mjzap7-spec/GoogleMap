@@ -22,7 +22,7 @@ import {
   type TransferRepository,
 } from '../../models/directTransfer';
 
-/** Authenticated signaling only. File bytes never enter Firestore or a TURN relay. */
+/** Authenticated signaling only. File bytes never enter Firestore. */
 export class FirebaseTransferRepository implements TransferRepository {
   private clock = new ServerClock(async () => {
     const user = getFirebaseAuth().currentUser;
@@ -86,6 +86,7 @@ export class FirebaseTransferRepository implements TransferRepository {
                 onSnapshot(
                   doc(this.db(uid), 'contactRequests', data.contextId),
                   (context) => {
+                    if (!context.exists() && context.metadata.fromCache) return;
                     if (context.data()?.status !== 'accepted') denied();
                   },
                   denied,
@@ -96,6 +97,7 @@ export class FirebaseTransferRepository implements TransferRepository {
                 onSnapshot(
                   doc(this.db(uid), 'users', uid, 'contacts', other),
                   (contact) => {
+                    if (!contact.exists() && contact.metadata.fromCache) return;
                     if (contact.data()?.requestId !== data.contextId) denied();
                   },
                   denied,
@@ -106,6 +108,7 @@ export class FirebaseTransferRepository implements TransferRepository {
                 onSnapshot(
                   doc(this.db(uid), 'privateGroups', data.contextId),
                   (context) => {
+                    if (!context.exists() && context.metadata.fromCache) return;
                     const joined = context.data()?.joinedIds;
                     if (
                       !Array.isArray(joined) ||

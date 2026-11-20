@@ -1,6 +1,6 @@
 # Direct WebRTC file transfers
 
-The chat attachment button opens the file picker for direct transfers up to 100 MB in one-to-one chats. It works for accepted contacts and private conversations between two joined group members. Group-room transfers are not supported.
+The chat attachment button stages a local file up to 100 MB above the composer. Picking a file does not create a message or start a network transfer. Remove it with ×, or tap Send to begin the private transfer in a one-to-one chat. It works for accepted contacts and private conversations between two joined group members. Group-room transfers are not supported.
 
 Files receive automatically while the recipient keeps the private chat open. Image files show an inline preview on both devices; other files show their filename. Progress and Cancel remain available during transfer. Tap a received image or filename to save: Android opens a folder picker, and iOS opens its system share sheet. Completed copies remain in app-private storage and reappear when reopening the conversation. Removing app data or uninstalling removes these copies. Files are not uploaded for offline delivery.
 
@@ -23,7 +23,7 @@ The updated signaling rules were published to the existing `map-f9b98` project d
 ## Test with the other user's emulator
 
 1. Make a 5–20 MB test file available in the sending emulator's Downloads folder (Android Studio Device Explorer or drag and drop onto the emulator).
-2. Tap **+**, then select the file. Check that both chats show the filename, or an image preview on the sender.
+2. Tap **+**, then select the file. Only the sender composer should show its draft filename or image preview. The recipient must see nothing yet. Tap Send and check that the file appears in both histories.
 3. Keep the recipient chat open. Receipt should start automatically; both sides should show progress. An image preview should appear on the recipient only after all bytes are stored.
 4. Tap the received image or filename, choose a folder on Android (or Save to Files in the iOS share sheet), and verify the saved contents or SHA-256 hash. Leave and reopen the chat: the preview and tap-to-save should still work.
 5. Send another file and press Cancel during progress. A partial file must not offer a save action. Then send another file successfully and confirm the earlier completed file can still be saved.

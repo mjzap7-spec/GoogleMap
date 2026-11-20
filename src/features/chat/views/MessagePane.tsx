@@ -274,7 +274,9 @@ export function MessagePane({
       )}
       {!state.selecting && (
         <MessageComposer
-          onDirectSend={state.editing ? undefined : direct?.send}
+          onDirectSend={state.editing ? undefined : direct?.pick}
+          fileDraft={state.editing ? undefined : direct?.state.draft}
+          onRemoveFile={direct?.clearDraft}
           directBusy={direct?.state.busy}
           height={composerHeight}
           onHeightChange={setComposerHeight}
@@ -282,7 +284,13 @@ export function MessagePane({
           sending={state.sending || state.localBusy}
           groupRoom={groupRoom}
           onChangeText={commands.setDraft}
-          onSend={commands.send}
+          onSend={() => {
+            if (direct?.state.draft && !state.editing) {
+              if (direct.state.busy) return;
+              void direct.send();
+              if (state.draft.trim()) commands.send();
+            } else commands.send();
+          }}
           context={context}
           actionKey={
             state.editing

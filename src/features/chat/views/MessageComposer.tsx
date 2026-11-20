@@ -4,6 +4,7 @@ import {
   Animated,
   BackHandler,
   Keyboard,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -18,6 +19,8 @@ import { EmojiPicker } from './EmojiPicker';
 
 export function MessageComposer({
   onDirectSend,
+  fileDraft,
+  onRemoveFile,
   directBusy,
   height,
   onHeightChange,
@@ -32,6 +35,8 @@ export function MessageComposer({
   onCancelAction,
 }: {
   onDirectSend?: () => void;
+  fileDraft?: { name: string; size: number; mime: string; previewUri?: string };
+  onRemoveFile?: () => void;
   directBusy?: boolean;
   height: number;
   onHeightChange: (height: number) => void;
@@ -54,8 +59,10 @@ export function MessageComposer({
   const [caret, setCaret] = useState<DraftSelection>();
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [focused, setFocused] = useState(false);
-  const sendOpacity = useChatProgress(draft.trim() || sending ? 1 : 0.4, 120);
-  const sendPress = useChatPress(!draft.trim() || sending);
+  const canSend = !!draft.trim() || !!fileDraft;
+  const blocked = sending || (!!fileDraft && !!directBusy);
+  const sendOpacity = useChatProgress(canSend || sending ? 1 : 0.4, 120);
+  const sendPress = useChatPress(!canSend || blocked);
   const emojiPress = useChatPress(sending);
   const appearance = useMessageArrival(true);
   useEffect(() => {
@@ -109,6 +116,34 @@ export function MessageComposer({
         style={s.composer}
         onLayout={(event) => onHeightChange(Math.ceil(event.nativeEvent.layout.height))}
       >
+        {fileDraft && (
+          <View style={s.fileDraft}>
+            {fileDraft.previewUri && /^image\/(png|jpeg|webp|gif)$/i.test(fileDraft.mime) ? (
+              <Image source={{ uri: fileDraft.previewUri }} style={s.filePreview} />
+            ) : (
+              <Text accessible={false} style={s.cancel}>
+                ▤
+              </Text>
+            )}
+            <View style={s.contextText}>
+              <Text numberOfLines={1} style={s.contextLabel}>
+                {fileDraft.name}
+              </Text>
+              <Text style={s.contextPreview}>
+                {t('Ready to send')} · {(fileDraft.size / 1048576).toFixed(1)} MB
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('Remove attachment')}
+              disabled={blocked}
+              onPress={onRemoveFile}
+              style={s.emoji}
+            >
+              <Text style={s.cancel}>×</Text>
+            </Pressable>
+          </View>
+        )}
         {context && (
           <View style={s.context}>
             <View style={s.contextText}>
@@ -207,9 +242,11 @@ export function MessageComposer({
           <Animated.View style={[sendPress.style, { opacity: sendOpacity }]}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t(editing ? 'Save changes' : 'Send message')}
-              accessibilityState={{ busy: sending, disabled: !draft.trim() || sending }}
-              disabled={!draft.trim() || sending}
+              accessibilityLabel={t(
+                editing ? 'Save changes' : fileDraft ? 'Send file' : 'Send message',
+              )}
+              accessibilityState={{ busy: blocked, disabled: !canSend || blocked }}
+              disabled={!canSend || blocked}
               onPress={onSend}
               onPressIn={sendPress.onPressIn}
               onPressOut={sendPress.onPressOut}
@@ -234,6 +271,19 @@ export function MessageComposer({
 }
 
 const s = StyleSheet.create({
+  fileDraft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 10,
+    marginHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 14,
+    backgroundColor: colors.input,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filePreview: { width: 48, height: 48, borderRadius: 10 },
   container: {
     position: 'absolute',
     top: 0,
