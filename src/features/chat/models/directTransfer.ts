@@ -20,15 +20,25 @@ export interface DirectTransfer extends TransferInfo {
   answer?: CallDescription;
 }
 export interface TransferSource extends TransferInfo {
+  previewUri?: string;
+  keep?(uid: string, id: string): Promise<LocalTransferFile>;
   read(offset: number, length: number): Promise<Uint8Array>;
   close(): void;
 }
 export interface TransferSink {
+  finish?(): Promise<void>;
+  keep?(uid: string, id: string): Promise<LocalTransferFile>;
   write(bytes: Uint8Array): Promise<void>;
   save(): Promise<void>;
   close(): void;
 }
+export interface LocalTransferFile {
+  uri: string;
+  save(): Promise<void>;
+  release?(): void;
+}
 export interface DirectFileDevice {
+  find?(uid: string, id: string): Promise<LocalTransferFile | undefined>;
   pick(): Promise<TransferSource | undefined>;
   receive(info: TransferInfo): Promise<TransferSink>;
 }
@@ -75,7 +85,7 @@ export interface DataTransferTransport {
     signal: AbortSignal;
     candidate: (candidate: CallCandidate) => void;
     progress: (bytes: number) => void;
-    complete: () => void;
+    complete: () => void | Promise<void>;
     fail: (message: string) => void;
   }): DataTransferSession;
 }

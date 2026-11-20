@@ -1,5 +1,6 @@
 import type { DataTransferSession, DataTransferTransport } from '../../models/directTransfer';
 import { fileDescription } from '../../models/fileSignaling';
+import type { IceServer } from '../../../interviews/data/webrtc/PeerCallMedia';
 import type { CallCandidate, CallDescription } from '../../../interviews/models/interview';
 
 interface Channel {
@@ -27,18 +28,19 @@ interface Peer {
   close(): void;
 }
 export interface FileRtcRuntime {
-  RTCPeerConnection: new (config: { iceServers: { urls: string }[] }) => Peer;
+  RTCPeerConnection: new (config: { iceServers: IceServer[] }) => Peer;
 }
 const CHUNK = 16 * 1024;
 const WINDOW = 256 * 1024;
 
-/** Ordered encrypted data, STUN-only. Acknowledgements bound sender and receiver memory. */
+/** Ordered encrypted data. Acknowledgements bound sender and receiver memory. */
 export function openFileChannel(
   runtime: FileRtcRuntime,
   options: Parameters<DataTransferTransport['open']>[0],
+  iceServers: IceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }],
 ): DataTransferSession {
   const peer = new runtime.RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    iceServers,
   });
   let channel: Channel | undefined;
   let closed = false,
@@ -59,7 +61,7 @@ export function openFileChannel(
     channel?.close();
     peer.close();
   };
-  const fail = (message = 'Direct connection unavailable. Try the same Wi-Fi network.') => {
+  const fail = (message = 'Could not transfer the file. Please try again.') => {
     if (closed || completed) return;
     close();
     options.fail(message);
@@ -139,7 +141,7 @@ export function openFileChannel(
           .catch(() => fail('Could not save the received file.'));
       } else if (typeof data === 'string' && data.length <= 128) {
         queue = queue
-          .then(() => {
+          .then(async () => {
             if (closed) return;
             const message = JSON.parse(data);
             if (
@@ -151,10 +153,13 @@ export function openFileChannel(
               acknowledged = message.received;
               progress(acknowledged);
             } else if (options.sink && message.end === options.size && received === options.size) {
-              channel!.send(JSON.stringify({ done: received }));
+              await options.sink.finish?.();
+              if (closed) return;
+              await options.complete();
+              if (closed) return;
               completed = true;
               clearInterval(watchdog);
-              options.complete();
+              channel!.send(JSON.stringify({ done: received }));
             } else if (
               options.source &&
               message.done === options.size &&

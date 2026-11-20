@@ -57,7 +57,7 @@ export const topics = [
   ],
   [
     'Unread messages',
-    'The Chats badge shows your total unread messages. Use the Unread filter in Chats to find conversations with new messages. Open a conversation and view the messages to mark them as read. A collapsed group also counts unread private chats with its members.',
+    'The Chats badge counts unread messages and unattended incoming calls. Answered and declined calls do not add to it. Open a conversation to clear its badge. The Unread filter helps you find these conversations.',
   ],
   [
     'Edit contact',

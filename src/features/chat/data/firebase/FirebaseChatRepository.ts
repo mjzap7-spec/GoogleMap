@@ -1,3 +1,4 @@
+import { UnreadAttention } from '../../models/UnreadAttention';
 import {
   collection,
   doc,
@@ -193,7 +194,19 @@ export class FirebaseChatRepository implements ChatRepository {
     fail: () => void,
     history?: LocalThreadHistory,
   ) {
-    const messages = transcript(this.database(uid), uid, peer);
+    const db = this.database(uid);
+    const messages = transcript(db, uid, peer);
+    const attention = new UnreadAttention(
+      uid,
+      (id, receive) =>
+        onSnapshot(
+          doc(db, 'interviewCalls', id),
+          { includeMetadataChanges: true },
+          (snapshot) => receive(snapshot.data()),
+          () => receive(undefined),
+        ),
+      next,
+    );
     const through = newerTime(after, history?.clearedThrough);
     const hidden = historyFilter(history);
     // The badge caps at 99+. This bounds the first read even for a long-lived group.
@@ -205,22 +218,27 @@ export class FirebaseChatRepository implements ChatRepository {
       orderBy('fromId'),
       limit(100 + (history?.hiddenIds.length ?? 0)),
     );
-    return onSnapshot(
+    const stop = onSnapshot(
       unseen,
       { includeMetadataChanges: true },
       (snap) => {
         // An empty local cache can precede the server's unread result.
         if (snap.empty && snap.metadata.fromCache) return;
-        next(
-          Math.min(
-            100,
-            snap.docs.filter((item) => !hidden({ id: item.id, createdAt: item.data().createdAt }))
-              .length,
-          ),
+        attention.sync(
+          snap.docs
+            .filter((item) => !hidden({ id: item.id, createdAt: item.data().createdAt }))
+            .map((item) => ({ id: item.id, text: item.data().text ?? '' })),
         );
       },
-      fail,
+      () => {
+        attention.stop();
+        fail();
+      },
     );
+    return () => {
+      stop();
+      attention.stop();
+    };
   }
   async markRead(uid: string, peer: ChatPeer, through: ReadTime) {
     const ref = doc(this.database(uid), 'users', uid, 'chatReads', threadKey(peer));

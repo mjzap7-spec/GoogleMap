@@ -1,9 +1,11 @@
 import type { DataTransferTransport } from '../../models/directTransfer';
-import { openFileChannel, type FileRtcRuntime } from '../webrtc/FileDataChannel';
+import type { FileRtcRuntime } from '../webrtc/FileDataChannel';
+import { openRelayedFileChannel } from '../webrtc/RelayedFileChannel';
+import { callIceServers } from '../../../interviews/data/webrtc/callIceServers';
 export class DirectTransferTransport implements DataTransferTransport {
   open: DataTransferTransport['open'] = (options) => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const runtime = require('react-native-webrtc') as FileRtcRuntime;
-    return openFileChannel(runtime, options);
+    return openRelayedFileChannel(runtime, options, callIceServers());
   };
 }

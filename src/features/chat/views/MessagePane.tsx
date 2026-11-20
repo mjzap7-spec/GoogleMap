@@ -594,10 +594,11 @@ const MessageBubble = memo(function MessageBubble({
                 </View>
                 <View style={s.invitationDetails}>
                   <Text style={s.invitationTitle}>
-                    {t(interview === 'voice' ? 'Voice interview' : 'Video interview')}
+                    {t(interview === 'voice' ? 'Voice call' : 'Video call')}
                   </Text>
                   {id.startsWith(callMessagePrefix) && (
                     <CallOutcome
+                      mine={mine}
                       watchCall={watchCall}
                       callId={id.slice(callMessagePrefix.length)}
                     />
@@ -655,24 +656,36 @@ function MessageSelectionControl({
     </Animated.View>
   );
 }
-function CallOutcome({ callId, watchCall }: { callId: string; watchCall?: WatchCall }) {
+function CallOutcome({
+  callId,
+  watchCall,
+  mine,
+}: {
+  callId: string;
+  watchCall?: WatchCall;
+  mine: boolean;
+}) {
   const { t } = useTranslation();
   const [history, setHistory] = useState<CallHistory>();
   useEffect(() => watchCall?.(callId, setHistory), [callId, watchCall]);
   if (!history || history.status === 'ringing') return null;
   const declined = history.status === 'declined';
   const label = declined
-    ? t('Interview declined')
-    : history.answered
-      ? t('Answered')
-      : t('No answer');
+    ? t('Call declined')
+    : history.status === 'busy'
+      ? t('Busy')
+      : history.answered
+        ? t('Answered')
+        : t(mine ? 'No answer' : 'Missed call');
   const duration = history.durationSeconds;
   const elapsed =
     duration === undefined
       ? ''
       : ` · ${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')}`;
   return (
-    <View style={s.invitationMeta}>
+    <View
+      style={[s.invitationMeta, s.outcome, history.answered ? s.answeredOutcome : s.missedOutcome]}
+    >
       <Text
         accessible={false}
         style={[s.outcomeIcon, { color: declined || !history.answered ? '#FF9AA7' : '#78DDB0' }]}
@@ -696,6 +709,16 @@ const s = StyleSheet.create({
     minHeight: 60,
   },
   fileIcon: { color: colors.accent, fontSize: 28 },
+  outcome: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginTop: 6,
+    marginBottom: 3,
+  },
+  answeredOutcome: { backgroundColor: '#78DDB015' },
+  missedOutcome: { backgroundColor: '#FF9AA712' },
   outcomeIcon: { fontSize: 17, fontWeight: '700' },
   pane: { flex: 1, backgroundColor: '#12141B' },
   muted: { color: colors.muted, textAlign: 'center' },

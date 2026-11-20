@@ -8,6 +8,45 @@ export type StringTranslations = readonly [
 ];
 
 export const strings: Readonly<Record<string, StringTranslations>> = {
+  'The Chats badge counts unread messages and unattended incoming calls. Answered and declined calls do not add to it. Open a conversation to clear its badge. The Unread filter helps you find these conversations.':
+    [
+      'La insignia cuenta mensajes sin leer y llamadas entrantes sin atender. Las llamadas contestadas o rechazadas no se suman. Abre una conversación para borrar su contador. El filtro No leídos te ayuda a encontrarlas.',
+      'Le badge compte les messages non lus et les appels entrants sans réponse. Les appels acceptés ou refusés ne sont pas comptés. Ouvrez une conversation pour effacer son badge. Le filtre Non lus aide à les retrouver.',
+      'Das Abzeichen zählt ungelesene Nachrichten und unbeantwortete eingehende Anrufe. Angenommene und abgelehnte Anrufe zählen nicht dazu. Öffne eine Unterhaltung, um das Abzeichen zu löschen. Der Filter Ungelesen hilft beim Finden.',
+      '聊天角标统计未读消息和未处理的来电。已接听和已拒绝的通话不计入。打开会话即可清除该会话的角标。可使用未读筛选找到这些会话。',
+      'チャットのバッジは未読メッセージと未対応の着信を数えます。応答済みや拒否した通話は含みません。会話を開くとバッジが消えます。未読フィルターで対象の会話を見つけられます。',
+    ],
+  'Missed call': ['Llamada perdida', 'Appel manqué', 'Verpasster Anruf', '未接来电', '不在着信'],
+  'Call declined': [
+    'Llamada rechazada',
+    'Appel refusé',
+    'Anruf abgelehnt',
+    '来电已拒绝',
+    '通話を拒否しました',
+  ],
+  Busy: ['Ocupado', 'Occupé', 'Besetzt', '忙线', '通話中'],
+  '{name}, unread messages and missed calls: {count}': [
+    '{name}, mensajes sin leer y llamadas perdidas: {count}',
+    '{name}, messages non lus et appels manqués : {count}',
+    '{name}, ungelesene Nachrichten und verpasste Anrufe: {count}',
+    '{name}，未读消息和未接来电：{count}',
+    '{name}、未読メッセージと不在着信：{count}',
+  ],
+  'Waiting for recipient…': [
+    'Esperando al destinatario…',
+    'En attente du destinataire…',
+    'Warten auf den Empfänger…',
+    '等待接收方…',
+    '受信者を待っています…',
+  ],
+  'Receiving…': ['Recibiendo…', 'Réception…', 'Wird empfangen…', '正在接收…', '受信中…'],
+  'File is not on this device. Ask the sender to resend.': [
+    'El archivo no está en este dispositivo. Pide que lo envíen de nuevo.',
+    'Ce fichier n’est pas sur cet appareil. Demandez un nouvel envoi.',
+    'Die Datei ist nicht auf diesem Gerät. Bitte erneut senden lassen.',
+    '此设备上没有该文件。请让发送方重新发送。',
+    'この端末にファイルがありません。再送信を依頼してください。',
+  ],
   Call: ['Llamar', 'Appeler', 'Anrufen', '呼叫', '通話'],
   'Camera off': [
     'Cámara apagada',

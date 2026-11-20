@@ -8,7 +8,10 @@
     "skipLibCheck": true,
     "outDir": ".test-build",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "react-native": ["./node_modules/react-native/types_generated/index.d.ts"]
+    }
   },
   "include": [
     "src/features/interviews/models/**/*.ts",
@@ -19,6 +22,7 @@
     "src/features/chat/models/**/*.ts",
     "src/features/help/models/**/*.ts",
     "src/shared/feedback/**/*.ts",
+    "src/shared/platform/directFile.native.ts",
     "src/config/firebase/firestore.native.ts",
     "src/features/map/models/**/*.ts",
     "src/features/map/viewmodels/**/*.ts",

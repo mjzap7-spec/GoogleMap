@@ -5,7 +5,7 @@ import { UnreadBadge } from './UnreadBadge';
 
 export function ChatIcon({ unread }: { unread: number }) {
   return (
-    <View accessible={false} pointerEvents="none">
+    <View accessible={false} pointerEvents="none" style={styles.frame}>
       <Image
         accessible={false}
         source={require('../../../assets/icons/chat-bubbles.png')}
@@ -32,6 +32,7 @@ export function EditIcon() {
   );
 }
 const styles = StyleSheet.create({
+  frame: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   icon: { width: 26, height: 26, tintColor: colors.accent },
   pencil: {
     width: 6,

@@ -316,7 +316,7 @@ test('waiting for Accept does not time out the network; accepted stalled connect
   session.close();
 });
 
-function fixture(uid = 'alice', devicePatch = {}) {
+function fixture(uid = 'alice', devicePatch = {}, automatic = false) {
   let listener,
     options,
     picks = 0,
@@ -385,6 +385,7 @@ function fixture(uid = 'alice', devicePatch = {}) {
     },
     uid,
     { peerId: uid === 'alice' ? 'bob' : 'alice', requestId: 'r' },
+    automatic,
   );
   return {
     model,
@@ -545,4 +546,209 @@ test('losing an acceptance race does not terminate another device transfer', asy
   assert.deepEqual(f.endings, []);
   f.model.stop();
   assert.deepEqual(f.endings, []);
+});
+
+test('configured relay reaches the file peer; cancelled credential loading never opens a peer', async () => {
+  const {
+    openRelayedFileChannel,
+  } = require('../.test-build/features/chat/data/webrtc/RelayedFileChannel');
+  const fake = rtc();
+  const common = {
+    size: 3,
+    source: {},
+    signal: new AbortController().signal,
+    candidate() {},
+    progress() {},
+    complete() {},
+    fail() {},
+  };
+  const servers = [
+    { urls: 'turn:relay.example:3478', username: 'short-lived', credential: 'test' },
+  ];
+  const session = openRelayedFileChannel(fake.runtime, common, Promise.resolve(servers));
+  await session.offer();
+  assert.deepEqual(fake.configs[0].iceServers, servers);
+  session.close();
+  let resolve;
+  const abort = new AbortController();
+  const cancelled = openRelayedFileChannel(
+    fake.runtime,
+    { ...common, signal: abort.signal },
+    new Promise((r) => {
+      resolve = r;
+    }),
+  );
+  abort.abort();
+  resolve(servers);
+  await assert.rejects(cancelled.offer(), /cancelled/i);
+  assert.equal(fake.peers.length, 1);
+});
+
+test('incoming offers receive automatically once, persist before acknowledging, and save after the session ends', async () => {
+  let accepted = 0,
+    kept = 0,
+    saved = 0,
+    closed = 0;
+  const file = {
+    uri: 'file:///private/photo.png',
+    async save() {
+      saved++;
+    },
+  };
+  const f = fixture(
+    'bob',
+    {
+      async receive() {
+        return {
+          async write() {},
+          async keep(uid, transfer) {
+            assert.equal(uid, 'bob');
+            assert.equal(transfer, id);
+            kept++;
+            return file;
+          },
+          async save() {},
+          close() {
+            closed++;
+          },
+        };
+      },
+    },
+    true,
+  );
+  f.repository.accept = async () => {
+    accepted++;
+  };
+  f.model.sync([{ text: DIRECT_FILE_PREFIX + id }]);
+  f.emit();
+  f.emit();
+  await tick();
+  assert.equal(accepted, 1);
+  await f.options.complete();
+  assert.equal(kept, 1);
+  assert.equal(closed, 1);
+  assert.equal(f.model.getSnapshot().files[id].uri, file.uri);
+  f.emit({ ...record, status: 'completed' });
+  assert.equal(f.model.getSnapshot().busy, false);
+  await f.model.save(id);
+  await f.model.send(); // A later transfer must not remove the previously received file.
+  await f.model.save(id);
+  assert.equal(saved, 2);
+  f.model.stop();
+});
+
+test('completed local files restore on reopening, while late restores after leaving release their previews', async () => {
+  let resolve,
+    releases = 0,
+    saved = 0;
+  const file = {
+    uri: 'blob:private',
+    async save() {
+      saved++;
+    },
+    release() {
+      releases++;
+    },
+  };
+  const f = fixture('bob', { find: async () => file });
+  f.model.sync([{ text: DIRECT_FILE_PREFIX + id }]);
+  f.emit({ ...record, status: 'completed' });
+  await tick();
+  assert.equal(f.model.getSnapshot().files[id].uri, file.uri);
+  await f.model.save(id);
+  assert.equal(saved, 1);
+  f.model.stop();
+  assert.equal(releases, 1);
+  const late = fixture('bob', {
+    find: () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  });
+  late.model.sync([{ text: DIRECT_FILE_PREFIX + id }]);
+  late.emit();
+  late.model.stop();
+  resolve(file);
+  await tick();
+  assert.deepEqual(late.model.getSnapshot().files, {});
+  assert.equal(releases, 2);
+});
+
+test('automatic receiving ignores outgoing and expired invitations', async () => {
+  const f = fixture('alice', {}, true);
+  f.model.sync([{ text: DIRECT_FILE_PREFIX + id }]);
+  f.emit();
+  await tick();
+  assert.equal(f.options, undefined);
+  f.model.stop();
+  const expired = fixture('bob', {}, true);
+  expired.model.sync([{ text: DIRECT_FILE_PREFIX + id }]);
+  expired.emit({ ...record, expiresAt: 1 });
+  await tick();
+  assert.equal(expired.options, undefined);
+  expired.model.stop();
+});
+
+test('sender completion waits until recipient flushes and persists the received file', async () => {
+  const fake = rtc();
+  let flush,
+    persist,
+    senderDone = false,
+    saved = false;
+  const common = {
+    size: 3,
+    signal: new AbortController().signal,
+    candidate() {},
+    progress() {},
+    fail(message) {
+      assert.fail(message);
+    },
+  };
+  const sender = openFileChannel(fake.runtime, {
+    ...common,
+    source: {
+      async read() {
+        return Uint8Array.of(1, 2, 3);
+      },
+    },
+    complete() {
+      senderDone = true;
+    },
+  });
+  const receiver = openFileChannel(fake.runtime, {
+    ...common,
+    sink: {
+      async write() {},
+      finish() {
+        return new Promise((resolve) => {
+          flush = resolve;
+        });
+      },
+    },
+    complete() {
+      return new Promise((resolve) => {
+        persist = () => {
+          saved = true;
+          resolve();
+        };
+      });
+    },
+  });
+  try {
+    fake.connect();
+    await tick();
+    assert.equal(senderDone, false);
+    assert.equal(persist, undefined);
+    flush();
+    await tick();
+    assert.equal(senderDone, false);
+    assert.equal(saved, false);
+    persist();
+    await tick();
+    assert.equal(saved, true);
+    assert.equal(senderDone, true);
+  } finally {
+    sender.close();
+    receiver.close();
+  }
 });

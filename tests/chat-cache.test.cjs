@@ -13,15 +13,19 @@ function fixture() {
     if (request === 'firebase/firestore')
       return {
         collection: (_db, ...path) => path.join('/'),
+        doc: (_db, ...path) => path.join('/'),
         query: (ref) => ref,
         orderBy: () => {},
         where: () => {},
         Timestamp: class {},
         limit: () => {},
-        onSnapshot: (_ref, options, next, fail) => {
+        onSnapshot: (ref, options, next, fail) => {
           assert.equal(options.includeMetadataChanges, true);
-          subscriptions.push({ next, fail });
-          return () => {};
+          const current = { ref, next, fail, stopped: false };
+          subscriptions.push(current);
+          return () => {
+            current.stopped = true;
+          };
         },
       };
     return original.call(this, request, ...args);
@@ -100,4 +104,39 @@ test('unread keeps cached messages visible and clears only on a confirmed empty 
   assert.deepEqual(values, [1]);
   next(snapshot(false));
   assert.deepEqual(values, [1, 0]);
+});
+
+test('unread counts missed calls once, removes answered calls live, and releases call listeners on read', () => {
+  const { repo, subscriptions } = fixture();
+  const counts = [];
+  const stop = repo.unread('me', { peerId: 'bob', requestId: 'request' }, undefined, (count) =>
+    counts.push(count),
+  );
+  const id = 'abcdefghijklmnopqrst';
+  const callMessage = {
+    ...message,
+    id: 'call_' + id,
+    data: () => ({ ...message.data(), text: 'Voice interview invitation' }),
+  };
+  subscriptions[0].next(snapshot(false, [message, callMessage]));
+  assert.deepEqual(counts, [1]); // No temporary unread badge for an already handled call.
+  assert.equal(subscriptions[1].ref, 'interviewCalls/' + id);
+  const emitCall = (call) => subscriptions[1].next({ data: () => call });
+  emitCall({ toId: 'me', status: 'ringing' });
+  assert.equal(counts.at(-1), 2);
+  emitCall({ toId: 'me', status: 'ended' });
+  assert.equal(counts.at(-1), 2); // The same call is never counted twice.
+  emitCall({ toId: 'me', status: 'accepted', answer: {} });
+  assert.equal(counts.at(-1), 1);
+  emitCall({ toId: 'me', status: 'ended', answer: {} });
+  assert.equal(counts.at(-1), 1);
+  emitCall({ toId: 'me', status: 'declined' });
+  assert.equal(counts.at(-1), 1);
+  subscriptions[0].next(snapshot(false));
+  assert.equal(counts.at(-1), 0);
+  assert.equal(subscriptions[1].stopped, true);
+  emitCall({ toId: 'me', status: 'ended' });
+  assert.equal(counts.at(-1), 0);
+  stop();
+  assert.equal(subscriptions[0].stopped, true);
 });

@@ -13,13 +13,13 @@ export function chatButtonLabel(
   unread: number,
 ) {
   return unread
-    ? t('{name}, unread messages: {count}', { name, count: unreadLabel(unread) })
+    ? t('{name}, unread messages and missed calls: {count}', { name, count: unreadLabel(unread) })
     : name;
 }
 
 /** The parent button announces the count. This overlay doesn't change its touch target. */
 export function UnreadBadge({ count, inline = false }: { count: number; inline?: boolean }) {
-  if (!count) return null;
+  if (!Number.isFinite(count) || count <= 0) return null;
   return (
     <View pointerEvents="none" accessible={false} style={[styles.badge, inline && styles.inline]}>
       <Text accessible={false} numberOfLines={1} maxFontSizeMultiplier={1.2} style={styles.text}>
@@ -34,18 +34,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -6,
-    minWidth: 19,
-    minHeight: 19,
+    minWidth: 21,
+    minHeight: 21,
     paddingHorizontal: 4,
     borderRadius: 12,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: colors.input,
-    backgroundColor: colors.accent,
+    backgroundColor: '#F18AA2',
     justifyContent: 'center',
     alignItems: 'center',
   },
   text: {
-    color: colors.buttonText,
+    color: '#2A101B',
     fontSize: 10,
     lineHeight: 14,
     fontWeight: '800',
